@@ -1,3 +1,11 @@
+## Your Team
+
+- Andrew Kim (akim227@wisc.edu)
+- Vincent Zhou (vzhou2@wisc.edu)
+
+Reach your partner directly by emailing the address above — it's their @wisc.edu NetID email.
+---
+
 # Typescript Game
 
 ## Setup
