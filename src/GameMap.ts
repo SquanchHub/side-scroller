@@ -12,7 +12,8 @@ export function computeParallaxX(
     mapWidth: number,
     bgWidth: number
 ): number {
-    return Math.trunc(offsetX);
+    if (mapWidth === myW) return 0;
+    return Math.trunc((offsetX * (myW - bgWidth)) / (myW - mapWidth));
 }
 
 export class GameMap {
