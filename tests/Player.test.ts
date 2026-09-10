@@ -100,3 +100,71 @@ describe("Player", () => {
         expect(player.getVelocity().y).toBeCloseTo(0.3);
     });
 });
+
+describe("Player dash", () => {
+    let player: Player;
+
+    beforeEach(() => {
+        player = new Player();
+    });
+
+    it("dash() cannot retrigger before DASH_COOLDOWN elapses", () => {
+        player.dash();
+        expect(player.isDashing()).toBe(true);
+
+        // burst ends, but cooldown is still active
+        player.update(player.DASH_DURATION);
+        expect(player.isDashing()).toBe(false);
+
+        player.dash(); // still within cooldown window, should be ignored
+        expect(player.isDashing()).toBe(false);
+    });
+
+    it("dash() can retrigger once DASH_COOLDOWN has fully elapsed", () => {
+        player.dash();
+        player.update(player.DASH_COOLDOWN); // clears both the burst and the cooldown
+
+        player.dash();
+        expect(player.isDashing()).toBe(true);
+    });
+
+    it("collideHorizontal() cancels an active dash (dashTimer=0) instead of letting it re-assert", () => {
+        player.dash();
+        expect(player.isDashing()).toBe(true);
+
+        player.collideHorizontal();
+        expect(player.isDashing()).toBe(false);
+        expect(player.getVelocity().x).toBe(0);
+    });
+
+    it("collideHorizontal() during a dash does not reset the cooldown, so a new dash still respects it", () => {
+        player.dash();
+        player.collideHorizontal();
+
+        player.dash(); // cooldown from the original dash should still be active
+        expect(player.isDashing()).toBe(false);
+    });
+
+    it("dash() leaves vel.y untouched", () => {
+        player.addVelocity(0, 0.3); // simulate mid-air fall speed
+        player.dash();
+        expect(player.getVelocity().y).toBeCloseTo(0.3);
+    });
+
+    it("vel.y set externally (e.g. by gravity) during an active dash stays independent of dash state", () => {
+        player.addAnimation("right"); // update() advances the current animation; stub it out since no frames are loaded in this test
+        player.dash();
+        player.setVelocity(player.getDashVelocityX(), 0.45); // GameManager.processActions()-style call
+        expect(player.isDashing()).toBe(true);
+        expect(player.getVelocity().y).toBeCloseTo(0.45);
+
+        player.update(16); // one frame of gravity/physics elapsing
+        expect(player.getVelocity().y).toBeCloseTo(0.45); // update() itself never touches velocity.y
+    });
+
+    it("getDashVelocityX() uses facing direction and DASH_SPEED", () => {
+        player.setVelocity(-player.MAX_SPEED, 0); // face left
+        player.dash();
+        expect(player.getDashVelocityX()).toBe(-player.DASH_SPEED);
+    });
+});

@@ -27,6 +27,7 @@ export class GameManager {
     moveRight: GameAction;
     moveLeft: GameAction;
     jump: GameAction;
+    dash: GameAction;
     stop: GameAction;
 
     constructor() {
@@ -40,6 +41,7 @@ export class GameManager {
         this.moveRight = new GameAction();
         this.moveLeft = new GameAction();
         this.jump = new GameAction();
+        this.dash = new GameAction();
         this.stop = new GameAction();
     }
 
@@ -89,6 +91,7 @@ export class GameManager {
                     this.inputManager.setGameAction(this.moveRight, RIGHT_ARROW);
                     this.inputManager.setGameAction(this.moveLeft, LEFT_ARROW);
                     this.inputManager.setGameAction(this.jump, 32);
+                    this.inputManager.setGameAction(this.dash, 70); // F
                     this.inputManager.setGameAction(this.stop, UP_ARROW);
                     this.oldState = STATE.Running;
                     this.gameState = STATE.Menu;
@@ -115,9 +118,15 @@ export class GameManager {
         if (this.moveLeft.isPressed() && this.map.player.getState() == CreatureState.NORMAL) {
             vel.x = -this.map.player.getMaxSpeed();
         }
+        if (this.map.player.isDashing()) {
+            vel.x = this.map.player.getDashVelocityX();
+        }
         this.map.player.setVelocity(vel.x, vel.y);
         if (this.jump.isPressed() && this.map.player.getState() == CreatureState.NORMAL) {
             this.map.player.jump(false);
+        }
+        if (this.dash.isBeginPress() && this.map.player.getState() == CreatureState.NORMAL) {
+            this.map.player.dash();
         }
         if (this.stop.isBeginPress()) {
             throw new Error("STOP"); //for testing purposes only
