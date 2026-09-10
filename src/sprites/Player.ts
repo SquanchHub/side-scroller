@@ -4,12 +4,24 @@ export class Player extends Creature {
     MAX_SPEED: number;
     JUMP_SPEED: number;
     onGround: boolean;
+    DASH_SPEED: number;
+    DASH_DURATION: number;
+    DASH_COOLDOWN: number;
+    dashTimer: number; // ms remaining in the active dash burst, 0 = not dashing
+    dashCooldownTimer: number; // ms remaining before another dash is allowed
+    facing: number; // +1 (right) or -1 (left), last nonzero horizontal direction
 
     constructor() {
         super();
         this.MAX_SPEED = 0.5;
         this.JUMP_SPEED = 0.95;
         this.onGround = false;
+        this.DASH_SPEED = 1.2;
+        this.DASH_DURATION = 150;
+        this.DASH_COOLDOWN = 600;
+        this.dashTimer = 0;
+        this.dashCooldownTimer = 0;
+        this.facing = 1;
     }
 
     getMaxSpeed() {
@@ -24,6 +36,7 @@ export class Player extends Creature {
     }
 
     collideHorizontal() {
+        this.dashTimer = 0; // cancel the dash rather than let processActions() re-assert it into the wall
         this.velocity.x = 0;
     }
 
@@ -31,6 +44,40 @@ export class Player extends Creature {
         if (this.onGround || forceJump) {
             this.onGround = false;
             this.setVelocity(0, -this.JUMP_SPEED);
+        }
+    }
+
+    dash() {
+        if (this.dashCooldownTimer <= 0) {
+            this.dashTimer = this.DASH_DURATION;
+            this.dashCooldownTimer = this.DASH_COOLDOWN;
+        }
+    }
+
+    isDashing(): boolean {
+        return this.dashTimer > 0;
+    }
+
+    getDashVelocityX(): number {
+        return this.facing * this.DASH_SPEED;
+    }
+
+    setVelocity(x: number, y: number) {
+        if (x > 0) {
+            this.facing = 1;
+        } else if (x < 0) {
+            this.facing = -1;
+        }
+        super.setVelocity(x, y);
+    }
+
+    update(deltaTime: number) {
+        super.update(deltaTime);
+        if (this.dashTimer > 0) {
+            this.dashTimer = Math.max(0, this.dashTimer - deltaTime);
+        }
+        if (this.dashCooldownTimer > 0) {
+            this.dashCooldownTimer = Math.max(0, this.dashCooldownTimer - deltaTime);
         }
     }
 
