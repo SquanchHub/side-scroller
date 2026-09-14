@@ -13,6 +13,15 @@ export class Settings {
         this.menu = createDiv();
         this.menu.style("background-color", "rgba(0,0,0,0.75)");
         this.menu.position(30, 30);
+        const instructions = createDiv(
+            "Left/Right Arrows: Move<br>" +
+                "Space: Jump<br>" +
+                "F: Dash<br>" +
+                "M: Open/Close this Menu<br>" +
+                "Escape: Fullscreen"
+        );
+        instructions.style("color", "white");
+        this.menu.child(instructions);
         const music = createCheckbox("Play Music", this.playMusic);
         music.changed(this.togglePlayMusic.bind(this));
         this.menu.child(music);
