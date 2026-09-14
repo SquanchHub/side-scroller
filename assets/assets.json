@@ -40,7 +40,8 @@
         },
         "text": {
             "map1": "assets/maps/map1.txt",
-            "map2": "assets/maps/map2.txt"
+            "map2": "assets/maps/map2.txt",
+            "map3": "assets/maps/map3.txt"
         },
         "sound": {
             "music": "assets/sounds/music.mp3",
