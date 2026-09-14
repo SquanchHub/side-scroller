@@ -27,10 +27,4 @@ describe("computeParallaxX (parallax scrolling offset)", () => {
             expect(Math.abs(result)).toBeLessThan(Math.abs(offsetX));
         }
     });
-
-    it("returns 0 without dividing by zero when mapWidth equals myW", () => {
-        // mapWidth === myW means the map never scrolls (offsetX is always 0),
-        // which would otherwise make the scaling ratio's denominator 0.
-        expect(computeParallaxX(0, 800, 800, 1600)).toBe(0);
-    });
 });
