@@ -311,6 +311,11 @@ export class GameMap {
             return;
         }
         this.updateSprite(this.player); //moves sprite within the game
+        if (this.player.getPosition().y > this.tilesToPixels(this.height)) {
+            //fell out of the level; player is already off-screen, so skip DYING and reset immediately
+            this.initialize();
+            return;
+        }
         this.player.update(deltaTime); //updates the animation of the sprite
 
         this.sprites.forEach((sprite, index, obj) => {
