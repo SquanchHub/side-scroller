@@ -18,7 +18,7 @@ export class Settings {
                 "Space: Jump<br>" +
                 "F: Dash<br>" +
                 "M: Open/Close this Menu<br>" +
-                "Escape: Fullscreen"
+                "Enter: Toggle Fullscreen"
         );
         instructions.style("color", "white");
         this.menu.child(instructions);

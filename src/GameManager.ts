@@ -8,7 +8,7 @@ import { CreatureState } from "./sprites/Creature.js";
 
 export const GRAVITY: number = 0.002;
 
-enum STATE {
+export enum STATE {
     Loading,
     Menu,
     Running,
@@ -128,9 +128,10 @@ export class GameManager {
         if (this.dash.isBeginPress() && this.map.player.getState() == CreatureState.NORMAL) {
             this.map.player.dash();
         }
-        if (this.stop.isBeginPress()) {
-            throw new Error("STOP"); //for testing purposes only
-        }
+        // commented out so users don't crash game on live version
+        // if (this.stop.isBeginPress()) {
+        //     throw new Error("STOP"); //for testing purposes only
+        // }
     }
 
     toggleFullScreen() {
@@ -138,6 +139,9 @@ export class GameManager {
     }
 
     toggleMenu() {
+        if (this.gameState == STATE.Loading) {
+            return; // map doesn't exist yet, nothing to show the menu over
+        }
         if (this.gameState == STATE.Menu) {
             this.gameState = this.oldState;
             if (this.gameState != STATE.Menu) {
