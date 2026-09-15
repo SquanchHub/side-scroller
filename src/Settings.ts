@@ -17,6 +17,7 @@ export class Settings {
             "Left/Right Arrows: Move<br>" +
                 "Space: Jump<br>" +
                 "F: Dash<br>" +
+                "G: Fire (after collecting a Fire Orb)<br>" +
                 "M: Open/Close this Menu<br>" +
                 "Enter: Toggle Fullscreen"
         );

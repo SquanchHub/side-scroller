@@ -14,6 +14,7 @@
 #   *       Goal
 #   1       Bad Guy 1 (grub)
 #   2       Bad Guy 2 (fly)
+#   ^       Fire Orb
 @parallax-layer bg1
 @parallax-layer bg2
 @music music
@@ -21,11 +22,11 @@
                                                                                           
                                                    o  2   o                               
                                                   IIII  IIII             2     o          
-                     2     o                                          BBBBBB  BBBB        
+          o          2     o                                          BBBBBB  BBBB        
                   BBBBBB  BBBB                                      o BBBBBB  BBBB        
-               o  BBBBBB  BBBB                BB  BBBBBBBBBB       1  BBBBBB  BBBB        
+               o  BBBBBB  BBBB   ^            BB  BBBBBBBBBB       1  BBBBBB  BBBB        
           BB  BBBBBBBBBB  BBBB             2  BB  BBBBBBBBBB  BB  BBBBBBBBBB  BBBB        
- 0      1 BB  BBBBBBBBBB  BBBB          BBBBBBBB  BBBBBBBBBB  BB  BBBBBBBBBB  BBBB    o * 
+ 0     ^1 BB  BBBBBBBBBB  BBBB          BBBBBBBB  BBBBBBBBBB  BB  BBBBBBBBBB  BBBB    o *
 BBBB  BBBBBB  BBBBBBBBBB  BBBB 1      o BBBBBBBB  BBBBBBBBBB  BB  BBBBBBBBBB  BBBBBBBBBBBB
 BBBB  BBBBBB  BBBBBBBBBB  BBBBBBBB  BBBBBBBBBBBB  BBBBBBBBBB  BB  BBBBBBBBBB  BBBBBBBBBBBB
 BBBB  BBBBBB  BBBBBBBBBB  BBBBBBBB  BBBBBBBBBBBB  BBBBBBBBBB  BB  BBBBBBBBBB  BBBBBBBBBBBB
