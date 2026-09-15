@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { GameManager } from "../src/GameManager";
 import { GameAction } from "../src/GameAction";
 import { Player } from "../src/sprites/Player";
 import type { GameMap } from "../src/GameMap";
+import type { SoundManager } from "../src/SoundManager";
 
 // GameManager's real constructor is not usable in Node: it builds a Settings
 // (which calls the p5 globals createDiv/createCheckbox at construction time)
@@ -11,11 +12,11 @@ import type { GameMap } from "../src/GameMap";
 // sketch, and tests/mocks/p5.ts only stubs createVector/deltaTime, so `new
 // GameManager()` throws before it finishes.
 //
-// processActions() only ever reads this.map.player and the five GameAction
-// fields (moveRight/moveLeft/jump/dash/stop), all of which are plain public
-// fields with no p5 dependency of their own. So instead of going through the
-// constructor, build the instance with Object.create(GameManager.prototype)
-// and hand-wire just those fields.
+// processActions() only ever reads this.map.player, the five GameAction
+// fields (moveRight/moveLeft/jump/dash/stop/fire), and this.soundManager -
+// none of which have a p5 dependency of their own. So instead of going
+// through the constructor, build the instance with
+// Object.create(GameManager.prototype) and hand-wire just those fields.
 function makeGameManager(player: Player): GameManager {
     const gm = Object.create(GameManager.prototype) as GameManager;
     gm.moveRight = new GameAction();
@@ -24,6 +25,7 @@ function makeGameManager(player: Player): GameManager {
     gm.dash = new GameAction();
     gm.stop = new GameAction();
     gm.fire = new GameAction();
+    gm.soundManager = { playEvent: vi.fn() } as unknown as SoundManager;
     gm.map = { player } as GameMap;
     return gm;
 }
@@ -75,5 +77,18 @@ describe("GameManager.processActions() dash override", () => {
         gm.processActions();
         expect(player.isDashing()).toBe(true);
         expect(player.getVelocity().y).toBeCloseTo(0.3);
+    });
+
+    it("plays the dashSound event on a successful trigger, but not on a cooldown-blocked retrigger", () => {
+        gm.dash.press(); // BEGIN_PRESS
+        gm.processActions(); // starts the dash
+        expect(player.isDashing()).toBe(true);
+        expect(gm.soundManager.playEvent).toHaveBeenCalledWith("dashSound");
+        expect(gm.soundManager.playEvent).toHaveBeenCalledTimes(1);
+
+        gm.dash.release(); // PRESSED -> END_PRESS
+        gm.dash.press(); // END_PRESS -> BEGIN_PRESS again (a quick re-tap)
+        gm.processActions(); // still on cooldown - dash() returns false, blocked
+        expect(gm.soundManager.playEvent).toHaveBeenCalledTimes(1); // no additional play
     });
 });

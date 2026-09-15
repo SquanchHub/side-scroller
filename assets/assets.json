@@ -44,9 +44,19 @@
             "map3": "assets/maps/map3.txt"
         },
         "sound": {
-            "music": "assets/sounds/music.mp3",
-            "prize": "assets/sounds/prize.wav",
-            "boop2": "assets/sounds/boop2.wav"
+            "music": "assets/sounds/p1.mp3",
+            "prize": "assets/sounds/Plug-in.wav",
+            "boop2": "assets/sounds/flyswatter.wav",
+            "fireHit": "assets/sounds/hit02.mp3",
+            "heartPickup": "assets/sounds/magic_words.wav",
+            "fireOrbPickup": "assets/sounds/ignition.mp3",
+            "fireLaunch": "assets/sounds/flame.mp3",
+            "dashSound": "assets/sounds/swish-12.wav",
+            "cyberpunkMoonlightSonata": "assets/sounds/cyberpunkMoonlightSonata.mp3",
+            "battleThemeA": "assets/sounds/battleThemeA.mp3",
+            "catchTrack": "assets/sounds/catch.mp3",
+            "enchantedTiki86": "assets/sounds/enchantedTiki86.mp3",
+            "slimeHero": "assets/sounds/slime_hero.mp3"
         },
         "json": {
             "resources": "assets/resources/resources.json"
