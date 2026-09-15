@@ -1,41 +1,33 @@
 Repo and Codebase Organization:
 
-Every frame, p5 calls draw() in Main.ts where it clears the background, applies a uniform scale factor so the 800x600 game fits the actual canvas, then if the window is focused, calls game.update().
+Each frame, p5 calls draw() in Main.ts, it clears the background, applies a uniform scale factor so the game is 800x600. If the window is focused, calls game.update().
 
-The GameManager.update() in GameManager.ts dispatches gameState in STATE.Running, in the order:
-1. this.map.update(): moves every sprite and resolves collisions
-2. this.inputManager.checkInput(): polls keyIsDown() for each bound keycode, and advances the key's GameAction state machine
-3. this.processActions(): translates now-current GameAction states into action calls on the player
+GameManager.update() dispatches gameState in STATE.Running, where it does:
+1. this.map.update(): moves every sprite, and resolves tile collision.
+2. this.inputManager.checkInput(): polls keyIsDown() for each bound keycode, and advances the GameAction based off of the key pressed.
+3. this.processActions(): translates the current GameAction state into action calls on the player.
 
-Because map.update() runs before checkInput() and processActions(), this frame's physics used last frame's velocity. A key pressed now takes effect next frame — a one-frame input latency built into the loop's shape.
+GameMap.update() if the player is DEAD, re-initialize() the level and return. Otherwise, updateSprite(player), then an OOB check, then player.update(deltaTime), then loop over sprites, then updateProjectiles().
 
-If the player is dead, just re-initialize() the level, otherwise, updateSprite(player), then player.update(deltaTime), then loop over sprites.
+- Gravity, X move, Y move are unchanged in shape, but the collision box used throughout getTileCollision, wall/ground snapping now comes from getCollisionWidth()/getCollisionHeight(), not getImage().
 
-updateSprite() resolves X first then Y within each tile-collision check. Separating the axes is what lets the player slide along a wall while falling, instead of a diagonal collision stopping both directions at once.
+- Player-vs-creature/powerup collision checkPlayerCollision is now checked once, after both axes are fully resolved. The new falling signal is player.airborneStreak >= AIRBORNE_ANIM_MIN_STREAK && oldVel.y > 0
 
-1. Gravity: if !s.isFlying(), add GRAVITY * deltaTime to velocity.y.
-2. X move: tentatively add velocity.x * deltaTime to position. Call getTileCollision() against that new position.
-3. Y move: same pattern, and tentatively apply velocity.y * deltaTime, check tile collision, snap to the tile's top/bottom edge, call collideVertical()
+checkPlayerCollision() now snapshots every sprite overlapping the player, and branches three ways per Creature hit: dashing kills the creature now unconditionally, falling stomp-kill, and a PowerUp hit from acquirePowerUp().
 
-In GameManager, processAction():
-processActions() — GameManager.ts:112:
+processActions() vel.x resets every frame, if the fire key isPressed(), and player is NORMAL, player.tryFire(), needs a FireOrb
 
-- Reset vel.x = 0 each frame (horizontal velocity doesn't persist — only vertical/gravity does).
-If right/left held and player is NORMAL: set vel.x to ±maxSpeed. This is why my dash couldn't work the way jump does. Jump writes vel.y once and it persists, since nothing resets it. vel.x is rebuilt from zero every frame, so a one-shot setVelocity would be overwritten immediately. The dash needed an override branch in processActions() itself, placed after the movement-key checks so a held arrow key can't fight it.
-- If dashing (player.isDashing(), a timer set by a prior dash() call): override vel.x with the dash velocity, ignoring normal movement input.
-- Push velocity via setVelocity().
-- If jump isPressed() and NORMAL: call player.jump(false) (only takes effect if onGround).
-- If dash key isBeginPress() (edge-triggered, not held) and NORMAL: call player.dash(), which starts the dash timer if the cooldown has expired.
+Abilities:
+- Dashing, F key to dash horizontally, can also dash in the air. If dashing (player.isDashing(), a timer set by a prior dash() call): override vel.x with the dash velocity, ignoring normal movement input. Push velocity via setVelocity(). If jump isPressed() and NORMAL: call player.jump(false) (only takes effect if onGround). If dash key isBeginPress() (edge-triggered, not held) and NORMAL: call player.dash(), which starts the dash timer if the cooldown has expired.
+- Fire ability: G key to fire, Player gets two independent timers: fireAbilityTimer, and fireCooldownTimer. tryFire() returns true only if the buff is active and the cooldown has expired. spawnProjectile clones a Projectile template resource, and positions it outside player's left/right edge, and gives it a constance horizontal velocity of direction * SPEED with vel.y = 0
 
-GameManager.draw()
-- Compute a camera offsetX that centers the player horizontally.
-- Draw parallax background layers through computeParallaxX().
-- Draw only the visible tile column range from (firstTileX to lastTileX)
-- Draw the player image at its screen position.
-- Draw every sprite in sprites, and for any Creature currently within the visible screen band, call sprite.wakeUp().
+Systems:
+- Death effects
+- getDesiredAnimation() chooses different animation given state
+- Non-looping animations
+- SoundManager
 
-Load time: ResourceManager.ts + assets.json
-From preload() -> new GameManager() -> new ResourceManager("assets/assets.json") -> init()
+Load time: ResourceManager.ts + assets.json, preload() to new GameManager() to new ResourceManager("assets/assets.json") to init().
 
 AI Tools Used:
 
@@ -57,5 +49,6 @@ AI Tools Used:
 - Read all 8 relevant source files plus assets.json/resources.json before answering, and the call-order claims (map.update() → checkInput() → processActions(), axis-separated X-then-Y collision, camera clamping) are verifiable against the actual source line-by-line.
 
 Best Practices Learned:
-- Using claude to enhance prompting strategies before feeding the prompt to the coding agent.
-- Verifying the commits before pushing.
+- Using claude to enhance prompting strategies before feeding the prompt to the coding agent. So refine the prompt for claude by providing the context to another claude session, and having it write the prompt for the claude doing the coding.
+- Verifying the commits before pushing. Check whether the commit I am making is correct, and is the version that I want to push to main.
+- Test it myself to check for edge cases that is potentially not able to be understood by claude because it does not have reference to the interface of the game, and the game itself.
