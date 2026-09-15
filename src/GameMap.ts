@@ -4,6 +4,7 @@ import { Sprite } from "./sprites/Sprite.js";
 import { GRAVITY } from "./GameManager.js";
 import { Creature, CreatureState } from "./sprites/Creature.js";
 import { FireOrb, Heart, Music, PowerUp, Star } from "./sprites/PowerUp.js";
+import { Explosion } from "./sprites/Explosion.js";
 import { Projectile } from "./sprites/Projectile.js";
 import { Settings } from "./Settings.js";
 import { SoundManager } from "./SoundManager.js";
@@ -154,19 +155,32 @@ export class GameMap {
             }
         }
 
-        image(
-            this.player.getImage(),
-            Math.trunc(Math.trunc(position.x) + offsetX),
-            Math.trunc(Math.trunc(position.y) + offsetY)
-        );
+        // An exploding-on-death player/caveman disappears entirely once
+        // dying -- the separate Explosion sprite (in this.sprites) is what
+        // plays at their old position instead.
+        const playerExploding =
+            this.player.explodesOnDeath && this.player.getState() != CreatureState.NORMAL;
+        if (!playerExploding) {
+            image(
+                this.player.getImage(),
+                Math.trunc(Math.trunc(position.x) + offsetX),
+                Math.trunc(Math.trunc(position.y) + offsetY + this.player.getDrawOffsetY())
+            );
+        }
 
         this.sprites.forEach((sprite) => {
             const p = sprite.getPosition();
-            image(
-                sprite.getImage(),
-                Math.trunc(Math.trunc(p.x) + offsetX),
-                Math.trunc(Math.trunc(p.y) + offsetY)
-            );
+            const hiddenWhileExploding =
+                sprite instanceof Creature &&
+                sprite.explodesOnDeath &&
+                sprite.getState() != CreatureState.NORMAL;
+            if (!hiddenWhileExploding) {
+                image(
+                    sprite.getImage(),
+                    Math.trunc(Math.trunc(p.x) + offsetX),
+                    Math.trunc(Math.trunc(p.y) + offsetY + sprite.getDrawOffsetY())
+                );
+            }
             if (sprite instanceof Creature && p.x + offsetX > 0 && p.x + offsetX < myW) {
                 sprite.wakeUp();
             }
@@ -194,17 +208,21 @@ export class GameMap {
         pos1.y = Math.round(pos1.y);
         pos2.x = Math.round(pos2.x);
         pos2.y = Math.round(pos2.y);
-        const i1 = s1.getImage();
-        const i2 = s2.getImage();
+        // Use the collision box (same as tile collision/ground-snapping),
+        // not the raw image size: Grub/caveman fix their collision height
+        // at 64px while their cropped art frames are much shorter and
+        // drawn bottom-aligned via drawOffsetY, so getImage().height here
+        // would test overlap against a box floating above the creature's
+        // actual drawn position instead of the creature itself.
         const val =
-            pos1.x < pos2.x + i2.width &&
-            pos2.x < pos1.x + i1.width &&
-            pos1.y < pos2.y + i2.height &&
-            pos2.y < pos1.y + i1.height;
+            pos1.x < pos2.x + s2.getCollisionWidth() &&
+            pos2.x < pos1.x + s1.getCollisionWidth() &&
+            pos1.y < pos2.y + s2.getCollisionHeight() &&
+            pos2.y < pos1.y + s1.getCollisionHeight();
         return val;
     }
 
-    checkPlayerCollision(p: Player, canKill: boolean) {
+    checkPlayerCollision(p: Player, isFalling: boolean) {
         if (p.getState() != CreatureState.NORMAL) return;
         // Snapshot every sprite currently overlapping the player (not just
         // the first match) so a Creature and a PowerUp that happen to
@@ -216,19 +234,49 @@ export class GameMap {
         for (const s of overlapping) {
             if (p.getState() != CreatureState.NORMAL) break; // player already died this call
             if (s instanceof Creature) {
-                if (canKill) {
-                    s.setState(CreatureState.DYING);
+                if (p.isDashing()) {
+                    // Dash kill: destroys on contact from any direction, no
+                    // bounce/reposition -- the player just powers through
+                    // and keeps their dash trajectory. Checked before
+                    // isFalling: dash() never touches vertical velocity, so
+                    // gravity keeps accruing during a mid-air dash and
+                    // isFalling can go true a couple of frames in -- without
+                    // this ordering that would misfire the stomp branch
+                    // (bounce + reposition) on top of an active dash.
+                    this.killCreature(s);
                     this.soundManager.playEvent("boop2");
+                } else if (isFalling) {
+                    // Stomp kill: bounce off the top.
                     const pos = s.getPosition();
+                    this.killCreature(s);
+                    this.soundManager.playEvent("boop2");
                     p.setPosition(p.getPosition().x, pos.y - p.getImage().height);
                     p.jump(true);
                 } else {
-                    p.setState(CreatureState.DYING);
+                    this.killCreature(p);
                 }
             } else if (s instanceof PowerUp) {
                 this.acquirePowerUp(s);
             }
         }
+    }
+
+    // Transitions a creature to DYING, and if it has a deathEffect (an
+    // "Explosion"-type resource name -- "explosion" for player/caveman,
+    // "bugjuice" for grub/fly), spawns a standalone copy of it at the
+    // creature's current position to play there (see Creature.deathEffect).
+    killCreature(c: Creature) {
+        const pos = c.getPosition();
+        c.setState(CreatureState.DYING);
+        if (c.deathEffect) {
+            this.spawnEffect(c.deathEffect, pos.x, pos.y);
+        }
+    }
+
+    spawnEffect(resourceName: string, x: number, y: number) {
+        const effect = this.resources.get(resourceName).clone();
+        effect.setPosition(x, y);
+        this.sprites.push(effect);
     }
 
     removeSprite(s: Sprite) {
@@ -284,6 +332,15 @@ export class GameMap {
             }
             p.update(deltaTime);
             if (target || p.hitSomething || p.isExpired()) {
+                // Same "explosion" Explosion-type resource used for
+                // player/caveman death (see killCreature()) -- plays once in
+                // place, no physics, and self-removes from this.sprites (see
+                // update()'s Explosion branch) once its animation finishes.
+                // On a hit, center it on the enemy rather than the
+                // projectile - isCollision() only requires overlap, not an
+                // exact position match, so the two can differ slightly.
+                const pos = target ? target.getPosition() : p.getPosition();
+                this.spawnEffect("explosion", pos.x, pos.y);
                 toRemove.push(p);
             }
         });
@@ -301,8 +358,8 @@ export class GameMap {
         const toY = Math.max(oldPos.y, newPos.y);
         const fromTileX = this.pixelsToTiles(fromX);
         const fromTileY = this.pixelsToTiles(fromY);
-        const toTileX = this.pixelsToTiles(toX + s.getImage().width - 1);
-        const toTileY = this.pixelsToTiles(toY + s.getImage().height - 1);
+        const toTileX = this.pixelsToTiles(toX + s.getCollisionWidth() - 1);
+        const toTileY = this.pixelsToTiles(toY + s.getCollisionHeight() - 1);
         for (let x = fromTileX; x <= toTileX; x++) {
             for (let y = fromTileY; y <= toTileY; y++) {
                 if (x < 0 || x >= this.tiles.length || this.tiles[x][y]) {
@@ -314,6 +371,15 @@ export class GameMap {
     }
 
     updateSprite(s: Sprite) {
+        // Freeze physics entirely once dying/dead, but only for creatures
+        // that explode on death (player, caveman) -- they disappear and an
+        // Explosion plays in their place, so they shouldn't keep
+        // falling/colliding invisibly in the meantime. Ordinary enemies
+        // (grub, fly) are unaffected and keep tumbling through their own
+        // death animation exactly as before.
+        if (s instanceof Creature && s.explodesOnDeath && s.getState() != CreatureState.NORMAL) {
+            return;
+        }
         //update velocity due to gravity
         const oldVel = s.getVelocity();
         const newPos = s.getPosition().copy();
@@ -330,7 +396,7 @@ export class GameMap {
         if (point) {
             if (oldVel.x > 0) {
                 //moving to the right
-                newPos.x = this.tilesToPixels(point.x) - s.getImage().width;
+                newPos.x = this.tilesToPixels(point.x) - s.getCollisionWidth();
             } else if (oldVel.x < 0) {
                 //moving to the left
                 newPos.x = this.tilesToPixels(point.x + 1);
@@ -338,25 +404,53 @@ export class GameMap {
             s.collideHorizontal();
         }
         s.setPosition(newPos.x, newPos.y);
-        if (s instanceof Player) {
-            this.checkPlayerCollision(s as Player, false);
-        }
 
         //now update the y part of the position
-        const oldY = newPos.y;
         newPos.y = newPos.y + oldVel.y * deltaTime;
         point = this.getTileCollision(s, newPos);
         if (point) {
             if (oldVel.y > 0) {
-                newPos.y = this.tilesToPixels(point.y) - s.getImage().height;
+                newPos.y = this.tilesToPixels(point.y) - s.getCollisionHeight();
             } else if (oldVel.y < 0) {
                 newPos.y = this.tilesToPixels(point.y + 1);
             }
             s.collideVertical();
         }
         s.setPosition(newPos.x, newPos.y);
+        // Checked once, after both axes are fully resolved for the frame
+        // (not once per axis, and not from a same-frame position/velocity
+        // delta). Two problems ruled out an axis-order or single-frame-delta
+        // check here:
+        // 1. Checking right after the horizontal step (with a hardcoded
+        //    isFalling=false) tested overlap against the sprite's position
+        //    from *before* this frame's vertical movement. If a tall,
+        //    correctly-sized creature (see isCollision()/getCollisionHeight())
+        //    already vertically overlapped the player from a prior frame --
+        //    common during a running jump's shallow diagonal approach --
+        //    while horizontal alignment only completed on this frame, that
+        //    earlier check fired first and force-classified a genuine
+        //    in-progress stomp as "walked into it," killing the player.
+        // 2. Even checking once, comparing this single frame's y before/after
+        //    isn't reliable either: gravity is added every frame regardless
+        //    of onGround, so a player resting motionlessly still nudges down
+        //    a fraction of a pixel before the next frame's tile collision
+        //    snaps it back -- the same one-frame ground flicker documented on
+        //    Player.airborneStreak. Reusing that already-debounced signal
+        //    (instead of re-deriving falling state from a single frame's
+        //    motion) avoids misreading a stationary side-bump as a stomp on
+        //    whichever frame happens to catch that flicker.
+        // airborneStreak alone only says "not freshly grounded" -- it stays
+        // true for the whole jump arc, ascending included. Without also
+        // requiring oldVel.y > 0 (still moving downward this frame, after
+        // gravity/collideVertical()), jumping up into the underside of an
+        // enemy was being treated as a stomp: it bounced the player and
+        // killed the enemy exactly as if landing on top of it.
         if (s instanceof Player) {
-            this.checkPlayerCollision(s as Player, oldY < newPos.y);
+            const player = s as Player;
+            this.checkPlayerCollision(
+                player,
+                player.airborneStreak >= Player.AIRBORNE_ANIM_MIN_STREAK && oldVel.y > 0
+            );
         }
     }
 
@@ -384,6 +478,11 @@ export class GameMap {
                 }
             } else if (sprite instanceof PowerUp) {
                 sprite.update(deltaTime);
+            } else if (sprite instanceof Explosion) {
+                sprite.update(deltaTime);
+                if (sprite.isFinished()) {
+                    obj.splice(index, 1);
+                }
             }
         });
 

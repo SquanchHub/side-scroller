@@ -27,7 +27,7 @@ function withMockImage<T extends { getImage: () => p5.Image }>(
 }
 
 describe("GameMap.checkPlayerCollision() with an overlapping Creature and PowerUp at the same spot", () => {
-    it("landing on top (canKill=true) kills the creature AND collects the powerup, in the same call", () => {
+    it("landing on top (isFalling=true) kills the creature AND collects the powerup, in the same call", () => {
         const map = makeGameMap();
         const player = withMockImage(new Player(), 16, 16);
         player.setPosition(300, 100);
@@ -66,7 +66,7 @@ describe("GameMap.checkPlayerCollision() with an overlapping Creature and PowerU
         expect(map.sprites).not.toContain(star);
     });
 
-    it("touching from the side (canKill=false) still kills the player, regardless of a powerup also overlapping", () => {
+    it("touching from the side (isFalling=false) still kills the player, regardless of a powerup also overlapping", () => {
         const map = makeGameMap();
         const player = withMockImage(new Player(), 16, 16);
         player.setPosition(300, 100);
@@ -108,5 +108,71 @@ describe("GameMap.checkPlayerCollision() with an overlapping Creature and PowerU
         map.checkPlayerCollision(player, false);
 
         expect(player.getState()).toBe(CreatureState.DYING);
+    });
+});
+
+describe("GameMap.checkPlayerCollision() dash kill", () => {
+    it("dashing into a creature (isFalling=false, isDashing=true) destroys it without bouncing or killing the player", () => {
+        const map = makeGameMap();
+        const player = withMockImage(new Player(), 16, 16);
+        player.setPosition(300, 100);
+        player.dash();
+        const jumpSpy = vi.spyOn(player, "jump");
+
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        map.sprites.push(grub);
+
+        map.checkPlayerCollision(player, false);
+
+        expect(grub.getState()).toBe(CreatureState.DYING);
+        expect(jumpSpy).not.toHaveBeenCalled();
+        expect(player.getState()).toBe(CreatureState.NORMAL); // player survives, keeps dashing
+        expect(map.soundManager.playEvent).toHaveBeenCalledWith("boop2");
+    });
+
+    it("a mid-air dash kill takes priority over a stomp even when isFalling is also true", () => {
+        // Regression: dash() never touches vertical velocity, so gravity
+        // keeps accruing during a mid-air dash and GameMap.updateSprite()
+        // can compute isFalling=true a couple of frames into the dash.
+        // Dashing into an enemy should still be a clean pass-through kill,
+        // not a stomp bounce+reposition on top of the active dash.
+        const map = makeGameMap();
+        const player = withMockImage(new Player(), 16, 16);
+        player.setPosition(300, 100);
+        player.dash();
+        const jumpSpy = vi.spyOn(player, "jump");
+
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        map.sprites.push(grub);
+
+        map.checkPlayerCollision(player, true); // isFalling=true, as updateSprite would compute mid-air
+
+        expect(grub.getState()).toBe(CreatureState.DYING);
+        expect(jumpSpy).not.toHaveBeenCalled();
+        expect(player.getState()).toBe(CreatureState.NORMAL);
+    });
+
+    it("a dash kill still spawns the creature's death effect, same as a stomp kill", () => {
+        // Regression guard for the merge with main's fire-ability branch:
+        // checkPlayerCollision's dash-kill branch must go through
+        // GameMap.killCreature() (not a bare setState(DYING)) so grub/fly
+        // still spawn their bugjuice splat when dashed through, not just
+        // when stomped.
+        const map = makeGameMap();
+        const player = withMockImage(new Player(), 16, 16);
+        player.setPosition(300, 100);
+        player.dash();
+
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        grub.deathEffect = "bugjuice";
+        map.sprites.push(grub);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect").mockImplementation(() => {});
+        map.checkPlayerCollision(player, false);
+
+        expect(spawnSpy).toHaveBeenCalledWith("bugjuice", 300, 100);
     });
 });
