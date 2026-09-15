@@ -3,18 +3,17 @@ import { GameMap } from "../src/GameMap";
 import { Player } from "../src/sprites/Player";
 import { Grub, CreatureState } from "../src/sprites/Creature";
 import { Star } from "../src/sprites/PowerUp";
-import type { Settings } from "../src/Settings";
+import type { SoundManager } from "../src/SoundManager";
 
 // Same Object.create(GameMap.prototype) technique as the other GameMap test
 // files. checkPlayerCollision() only reads/writes this.sprites, this.player
-// (indirectly, via the passed-in Player), this.settings, and the sound
-// fields it plays, so those are the only fields hand-wired here.
+// (indirectly, via the passed-in Player), and this.soundManager (all sound
+// playback routes through it now), so those are the only fields hand-wired
+// here.
 function makeGameMap() {
     const map = Object.create(GameMap.prototype) as GameMap;
     map.sprites = [];
-    map.settings = { playEvents: true } as unknown as Settings;
-    map.prize = { play: vi.fn() } as unknown as p5.SoundFile;
-    map.boop = { play: vi.fn() } as unknown as p5.SoundFile;
+    map.soundManager = { playEvent: vi.fn(), nextSong: vi.fn() } as unknown as SoundManager;
     return map;
 }
 
@@ -46,7 +45,7 @@ describe("GameMap.checkPlayerCollision() with an overlapping Creature and PowerU
 
         expect(grub.getState()).toBe(CreatureState.DYING);
         expect(map.sprites).not.toContain(star);
-        expect(map.prize.play).toHaveBeenCalledTimes(1);
+        expect(map.soundManager.playEvent).toHaveBeenCalledWith("prize");
         expect(player.getState()).toBe(CreatureState.NORMAL); // stomping, not dying
     });
 

@@ -55,11 +55,13 @@ export class Player extends Creature {
         }
     }
 
-    dash() {
+    dash(): boolean {
         if (this.dashCooldownTimer <= 0) {
             this.dashTimer = this.DASH_DURATION;
             this.dashCooldownTimer = this.DASH_COOLDOWN;
+            return true;
         }
+        return false;
     }
 
     isDashing(): boolean {

@@ -6,6 +6,7 @@ import { Creature, CreatureState } from "./sprites/Creature.js";
 import { FireOrb, Heart, Music, PowerUp, Star } from "./sprites/PowerUp.js";
 import { Projectile } from "./sprites/Projectile.js";
 import { Settings } from "./Settings.js";
+import { SoundManager } from "./SoundManager.js";
 
 export function computeParallaxX(
     offsetX: number,
@@ -29,21 +30,24 @@ export class GameMap {
     level: number;
     resources: ResourceManager;
     settings: Settings;
-    prize: p5.SoundFile;
+    soundManager: SoundManager;
     music: p5.SoundFile;
-    boop: p5.SoundFile;
 
-    constructor(level: number, resources: ResourceManager, settings: Settings) {
+    constructor(
+        level: number,
+        resources: ResourceManager,
+        settings: Settings,
+        soundManager: SoundManager
+    ) {
         this.settings = settings;
+        this.soundManager = soundManager;
         this.level = level;
         this.resources = resources;
         this.initialize();
     }
 
     initialize() {
-        this.prize = this.resources.getLoad("prize");
         this.music = this.resources.getLoad("music");
-        this.boop = this.resources.getLoad("boop2");
         this.sprites = [];
         this.projectiles = [];
         this.background = []; //this.resources.get("background");
@@ -214,9 +218,7 @@ export class GameMap {
             if (s instanceof Creature) {
                 if (canKill) {
                     s.setState(CreatureState.DYING);
-                    if (this.settings.playEvents) {
-                        this.boop.play();
-                    }
+                    this.soundManager.playEvent("boop2");
                     const pos = s.getPosition();
                     p.setPosition(p.getPosition().x, pos.y - p.getImage().height);
                     p.jump(true);
@@ -238,18 +240,13 @@ export class GameMap {
         this.removeSprite(p);
         if (p instanceof FireOrb) {
             this.player.grantFireAbility();
-            if (this.settings.playEvents) {
-                this.prize.play();
-            }
+            this.soundManager.playEvent("fireOrbPickup");
         } else if (p instanceof Star) {
-            if (this.settings.playEvents) {
-                this.prize.play();
-            }
+            this.soundManager.playEvent("prize");
         } else if (p instanceof Music) {
-            if (this.settings.playEvents) {
-                this.prize.play();
-            }
+            this.soundManager.nextSong();
         } else if (p instanceof Heart) {
+            this.soundManager.playEvent("heartPickup");
             this.level += 1;
             this.initialize();
         }
@@ -265,9 +262,7 @@ export class GameMap {
         p.setPosition(spawnX, spawnY);
         p.setVelocity(direction * p.SPEED, 0);
         this.projectiles.push(p);
-        if (this.settings.playEvents) {
-            this.prize.play();
-        }
+        this.soundManager.playEvent("fireLaunch");
     }
 
     updateProjectiles() {
@@ -285,9 +280,7 @@ export class GameMap {
             );
             if (target) {
                 (target as Creature).setState(CreatureState.DYING);
-                if (this.settings.playEvents) {
-                    this.boop.play();
-                }
+                this.soundManager.playEvent("fireHit");
             }
             p.update(deltaTime);
             if (target || p.hitSomething || p.isExpired()) {

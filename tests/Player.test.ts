@@ -128,6 +128,11 @@ describe("Player dash", () => {
         expect(player.isDashing()).toBe(true);
     });
 
+    it("dash() returns true on a successful trigger, false when blocked by cooldown", () => {
+        expect(player.dash()).toBe(true);
+        expect(player.dash()).toBe(false); // still within cooldown
+    });
+
     it("collideHorizontal() cancels an active dash (dashTimer=0) instead of letting it re-assert", () => {
         player.dash();
         expect(player.isDashing()).toBe(true);

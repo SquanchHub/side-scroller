@@ -1,15 +1,13 @@
-export class Settings {
-    public playMusic: boolean;
-    public playEvents: boolean;
+import { SoundManager } from "./SoundManager.js";
 
-    music: p5.SoundFile;
+export class Settings {
+    soundManager: SoundManager;
 
     menu: p5.Element;
     full: p5.Element;
 
-    constructor() {
-        this.playMusic = false;
-        this.playEvents = true;
+    constructor(soundManager: SoundManager) {
+        this.soundManager = soundManager;
         this.menu = createDiv();
         this.menu.style("background-color", "rgba(0,0,0,0.75)");
         this.menu.position(30, 30);
@@ -23,11 +21,11 @@ export class Settings {
         );
         instructions.style("color", "white");
         this.menu.child(instructions);
-        const music = createCheckbox("Play Music", this.playMusic);
-        music.changed(this.togglePlayMusic.bind(this));
+        const music = createCheckbox("Play Music", this.soundManager.playMusic);
+        music.changed(this.soundManager.toggleMusic.bind(this.soundManager));
         this.menu.child(music);
-        const events = createCheckbox("Play Event Sounds", true);
-        events.changed(this.toogleEventSounds.bind(this));
+        const events = createCheckbox("Play Event Sounds", this.soundManager.playEvents);
+        events.changed(this.soundManager.toggleEvents.bind(this.soundManager));
         this.menu.child(events);
         this.full = createCheckbox("Full Screen", false);
         this.full.changed(this.toggleFullScreen.bind(this));
@@ -47,24 +45,5 @@ export class Settings {
 
     toggleFullScreen() {
         fullscreen(!fullscreen());
-    }
-
-    togglePlayMusic() {
-        this.playMusic = !this.playMusic;
-        if (this.playMusic) {
-            this.music.setLoop(true);
-            this.music.playMode("restart");
-            this.music.play();
-        } else {
-            this.music.stop();
-        }
-    }
-
-    setMusic(m: p5.SoundFile) {
-        this.music = m;
-    }
-
-    toogleEventSounds() {
-        this.playEvents = !this.playEvents;
     }
 }

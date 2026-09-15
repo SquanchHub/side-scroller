@@ -3,8 +3,8 @@ import { GameMap } from "../src/GameMap";
 import { Projectile } from "../src/sprites/Projectile";
 import { Player } from "../src/sprites/Player";
 import { Grub, CreatureState } from "../src/sprites/Creature";
-import type { Settings } from "../src/Settings";
 import type { ResourceManager } from "../src/ResourceManager";
+import type { SoundManager } from "../src/SoundManager";
 
 // Same Object.create(GameMap.prototype) technique as
 // GameMap.acquirePowerUp.test.ts. updateProjectiles() (via updateSprite())
@@ -15,8 +15,7 @@ function makeGameMap() {
     const map = Object.create(GameMap.prototype) as GameMap;
     map.sprites = [];
     map.projectiles = [];
-    map.settings = { playEvents: true } as unknown as Settings;
-    map.boop = { play: vi.fn() } as unknown as p5.SoundFile;
+    map.soundManager = { playEvent: vi.fn(), nextSong: vi.fn() } as unknown as SoundManager;
     map.tile_size = 64;
     map.tiles = Array.from({ length: 20 }, () => new Array(20));
     return map;
@@ -106,7 +105,7 @@ describe("GameMap projectile physics", () => {
 
         expect(grub.getState()).toBe(CreatureState.DYING);
         expect(map.projectiles).not.toContain(p);
-        expect(map.boop.play).toHaveBeenCalledTimes(1);
+        expect(map.soundManager.playEvent).toHaveBeenCalledWith("fireHit");
     });
 
     it("does not interact with a DYING/DEAD creature (regression of isCollision()'s existing state exclusion)", () => {
@@ -122,7 +121,7 @@ describe("GameMap projectile physics", () => {
 
         map.updateProjectiles();
 
-        expect(map.boop.play).not.toHaveBeenCalled();
+        expect(map.soundManager.playEvent).not.toHaveBeenCalled();
         expect(map.projectiles).toContain(p); // untouched by the (excluded) enemy overlap
     });
 
@@ -157,7 +156,8 @@ describe("GameMap projectile physics", () => {
         expect(map.projectiles).not.toContain(hitter);
         expect(map.projectiles).toContain(flyer);
         expect(grub.getState()).toBe(CreatureState.DYING);
-        expect(map.boop.play).toHaveBeenCalledTimes(1); // flyer didn't also trigger a hit sound
+        expect(map.soundManager.playEvent).toHaveBeenCalledTimes(1); // flyer didn't also trigger a hit sound
+        expect(map.soundManager.playEvent).toHaveBeenCalledWith("fireHit");
     });
 });
 
@@ -171,7 +171,6 @@ describe("GameMap.spawnProjectile()", () => {
         map.resources = {
             get: (name: string) => (name === "projectile" ? template : undefined),
         } as unknown as ResourceManager;
-        map.prize = { play: vi.fn() } as unknown as p5.SoundFile;
         return map;
     }
 
@@ -197,7 +196,7 @@ describe("GameMap.spawnProjectile()", () => {
     it("plays the launch sound", () => {
         const map = makeGameMapWithPlayer();
         map.spawnProjectile(1);
-        expect(map.prize.play).toHaveBeenCalledTimes(1);
+        expect(map.soundManager.playEvent).toHaveBeenCalledWith("fireLaunch");
     });
 
     it("a shot fired point-blank into a wall the player is already touching fizzles on the very next tick (expected, not a crash)", () => {
