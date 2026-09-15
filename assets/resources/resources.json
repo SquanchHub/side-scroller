@@ -9,10 +9,18 @@
                 {"sheet":"caveman", "operators":["mirror"], "rows":4, "cols":4, "duration":150}
             ],
             "deadRight": [
-                {"sheet":"caveman", "operators":["flip"], "rows":4, "cols":4, "duration":150}
+                {"img":"explosion1", "duration":17},
+                {"img":"explosion2", "duration":17},
+                {"img":"explosion3", "duration":17},
+                {"img":"explosion4", "duration":17},
+                {"img":"explosion5", "duration":17}
             ],
             "deadLeft": [
-                {"sheet":"caveman", "operators":["flip","mirror"], "rows":4, "cols":4, "duration":150}
+                {"img":"explosion1", "duration":17},
+                {"img":"explosion2", "duration":17},
+                {"img":"explosion3", "duration":17},
+                {"img":"explosion4", "duration":17},
+                {"img":"explosion5", "duration":17}
             ]
         },
         "player": {
@@ -34,20 +42,40 @@
 		        {"img":"player2", "operators":["mirror"], "duration":150}
             ],
             "deadLeft": [
-                {"img":"player1", "operators":["flip"], "duration":250},
-                {"img":"player2", "operators":["flip"], "duration":150},
-                {"img":"player1", "operators":["flip"], "duration":150},
-                {"img":"player2", "operators":["flip"], "duration":150},
-                {"img":"player3", "operators":["flip"], "duration":200},
-                {"img":"player2", "operators":["flip"], "duration":150}
+                {"img":"explosion1", "duration":17},
+                {"img":"explosion2", "duration":17},
+                {"img":"explosion3", "duration":17},
+                {"img":"explosion4", "duration":17},
+                {"img":"explosion5", "duration":17}
             ],
             "deadRight": [
-		        {"img":"player1", "operators":["mirror","flip"], "duration":250},
-		        {"img":"player2", "operators":["mirror","flip"], "duration":150},
-		        {"img":"player1", "operators":["mirror","flip"], "duration":150},
-		        {"img":"player2", "operators":["mirror","flip"], "duration":150},
-		        {"img":"player3", "operators":["mirror","flip"], "duration":200},
-		        {"img":"player2", "operators":["mirror","flip"], "duration":150}
+                {"img":"explosion1", "duration":17},
+                {"img":"explosion2", "duration":17},
+                {"img":"explosion3", "duration":17},
+                {"img":"explosion4", "duration":17},
+                {"img":"explosion5", "duration":17}
+            ],
+            "jumpUpLeft": [
+                {"img":"playerJump1", "duration":150}
+            ],
+            "jumpUpRight": [
+                {"img":"playerJump1", "operators":["mirror"], "duration":150}
+            ],
+            "jumpDownLeft": [
+                {"img":"playerJump2", "duration":150}
+            ],
+            "jumpDownRight": [
+                {"img":"playerJump2", "operators":["mirror"], "duration":150}
+            ],
+            "dashLeft": [
+                {"img":"playerDash1", "duration":50},
+                {"img":"playerDash2", "duration":50},
+                {"img":"playerDash3", "duration":50}
+            ],
+            "dashRight": [
+                {"img":"playerDash1", "operators":["mirror"], "duration":50},
+                {"img":"playerDash2", "operators":["mirror"], "duration":50},
+                {"img":"playerDash3", "operators":["mirror"], "duration":50}
             ]
         },
         "music": {
@@ -124,6 +152,24 @@
                 {"img":"star2", "duration":150},
                 {"img":"star3", "duration":150},
                 {"img":"star4", "duration":150}
+            ]
+        },
+        "explosion": {
+            "type": "Explosion",
+            "default": [
+                {"img":"explosion1", "duration":100},
+                {"img":"explosion2", "duration":100},
+                {"img":"explosion3", "duration":100},
+                {"img":"explosion4", "duration":100},
+                {"img":"explosion5", "duration":100}
+            ]
+        },
+        "bugjuice": {
+            "type": "Explosion",
+            "default": [
+                {"img":"bugjuice1", "duration":100},
+                {"img":"bugjuice2", "duration":100},
+                {"img":"bugjuice3", "duration":100}
             ]
         },
         "fireorb": {

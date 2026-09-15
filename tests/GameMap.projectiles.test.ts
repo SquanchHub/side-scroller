@@ -10,7 +10,10 @@ import type { SoundManager } from "../src/SoundManager";
 // GameMap.acquirePowerUp.test.ts. updateProjectiles() (via updateSprite())
 // additionally needs tile_size/tiles for gravity+tile-collision, so those are
 // hand-wired too - a generously-sized empty grid by default so gravity can be
-// exercised without incidentally colliding with anything.
+// exercised without incidentally colliding with anything. Also needs
+// resources (a projectile spawns an "explosion" effect via spawnEffect() the
+// moment it's removed, for whatever reason) - a minimal cloneable stand-in
+// is enough since these tests don't inspect the spawned effect itself.
 function makeGameMap() {
     const map = Object.create(GameMap.prototype) as GameMap;
     map.sprites = [];
@@ -18,6 +21,9 @@ function makeGameMap() {
     map.soundManager = { playEvent: vi.fn(), nextSong: vi.fn() } as unknown as SoundManager;
     map.tile_size = 64;
     map.tiles = Array.from({ length: 20 }, () => new Array(20));
+    map.resources = {
+        get: () => ({ clone: () => ({ setPosition: vi.fn() }) }),
+    } as unknown as ResourceManager;
     return map;
 }
 
@@ -139,6 +145,66 @@ describe("GameMap projectile physics", () => {
         expect(map.projectiles).not.toContain(p);
     });
 
+    it("spawns an explosion effect at the ENEMY's position when it hits one, not the projectile's", () => {
+        const map = makeGameMap();
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        map.sprites.push(grub);
+
+        // Overlapping but not identical positions - isCollision() only needs
+        // overlap, not an exact match, so this also guards against the
+        // explosion accidentally landing on the projectile's spot instead.
+        const p = withMockImage(new Projectile(), 16, 16);
+        p.setPosition(305, 105);
+        map.projectiles.push(p);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+
+        expect(spawnSpy).toHaveBeenCalledWith("explosion", 300, 100);
+    });
+
+    it("spawns an explosion effect at the projectile's position when it hits a wall", () => {
+        const map = makeGameMap();
+        map.tiles[5][2] = {} as p5.Image; // a "wall" occupying x:[320,384) y:[128,192)
+        const p = withMockImage(new Projectile(), 16, 16);
+        p.setPosition(303, 150); // moving right toward the wall
+        p.setVelocity(0.6, 0);
+        map.projectiles.push(p);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+
+        expect(spawnSpy).toHaveBeenCalledWith("explosion", p.getPosition().x, p.getPosition().y);
+    });
+
+    it("spawns an explosion effect when a projectile expires with no collision", () => {
+        const map = makeGameMap();
+        const p = withMockImage(new Projectile(), 16, 16);
+        p.setPosition(300, 100);
+        map.projectiles.push(p);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        const ticks = Math.ceil(p.LIFETIME / 16) + 1;
+        for (let i = 0; i < ticks; i++) {
+            map.updateProjectiles();
+        }
+
+        expect(spawnSpy).toHaveBeenCalledWith("explosion", expect.any(Number), expect.any(Number));
+    });
+
+    it("does NOT spawn an explosion while a projectile is still alive and flying", () => {
+        const map = makeGameMap();
+        const p = withMockImage(new Projectile(), 16, 16);
+        p.setPosition(300, 100);
+        map.projectiles.push(p);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+
+        expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
     it("processes multiple simultaneous projectiles independently in one tick", () => {
         const map = makeGameMap();
         const grub = withMockImage(new Grub(), 16, 16);
@@ -169,7 +235,8 @@ describe("GameMap.spawnProjectile()", () => {
         map.player = player;
         const template = makeProjectileTemplate(16, 16);
         map.resources = {
-            get: (name: string) => (name === "projectile" ? template : undefined),
+            get: (name: string) =>
+                name === "projectile" ? template : { clone: () => ({ setPosition: vi.fn() }) },
         } as unknown as ResourceManager;
         return map;
     }

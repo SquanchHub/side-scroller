@@ -12,13 +12,11 @@ function isCollision(s1: any, s2: any): boolean {
     pos1.y = Math.round(pos1.y);
     pos2.x = Math.round(pos2.x);
     pos2.y = Math.round(pos2.y);
-    const i1 = s1.getImage();
-    const i2 = s2.getImage();
     return (
-        pos1.x < pos2.x + i2.width &&
-        pos2.x < pos1.x + i1.width &&
-        pos1.y < pos2.y + i2.height &&
-        pos2.y < pos1.y + i1.height
+        pos1.x < pos2.x + s2.getCollisionWidth() &&
+        pos2.x < pos1.x + s1.getCollisionWidth() &&
+        pos1.y < pos2.y + s2.getCollisionHeight() &&
+        pos2.y < pos1.y + s1.getCollisionHeight()
     );
 }
 
@@ -26,6 +24,8 @@ function makeSprite(x: number, y: number, w: number, h: number) {
     return {
         getPosition: () => ({ x, y, copy: () => ({ x, y }) }),
         getImage: () => ({ width: w, height: h }),
+        getCollisionWidth: () => w,
+        getCollisionHeight: () => h,
     };
 }
 
@@ -131,5 +131,20 @@ describe("GameMap.isCollision (AABB logic)", () => {
         const s1 = makeSprite(0, 0, 32, 32);
         const s2 = makeSprite(31.4, 0, 32, 32); // rounds to 31, overlapping
         expect(isCollision(s1, s2)).toBe(true);
+    });
+
+    it("uses collision box, not raw image size, for a creature whose art is cropped shorter than its hitbox", () => {
+        // Regression test: Grub fixes getCollisionHeight() at 64 (see
+        // Creature.ts) while its cropped art frames are much shorter and
+        // drawn bottom-aligned. Grub's column occupies y=[100,164], but its
+        // mocked "image" is only 30px tall. A player landing on top of the
+        // creature's actual (bottom-aligned) visual position should still
+        // register as overlapping -- using raw image size here would only
+        // test against y=[100,130], missing the player entirely and
+        // instead letting the player be treated as having "walked into" the
+        // creature (killing the player) rather than stomping it.
+        const grub = makeCreature(0, 100, 64, 30);
+        const player = makeSprite(0, 132, 64, 32); // player's feet reach y=164, matching the ground
+        expect(isCollision(player, grub)).toBe(true);
     });
 });
