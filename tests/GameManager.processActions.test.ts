@@ -23,6 +23,7 @@ function makeGameManager(player: Player): GameManager {
     gm.jump = new GameAction();
     gm.dash = new GameAction();
     gm.stop = new GameAction();
+    gm.fire = new GameAction();
     gm.map = { player } as GameMap;
     return gm;
 }

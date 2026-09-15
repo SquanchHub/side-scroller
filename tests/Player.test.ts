@@ -168,3 +168,65 @@ describe("Player dash", () => {
         expect(player.getDashVelocityX()).toBe(-player.DASH_SPEED);
     });
 });
+
+describe("Player fire ability", () => {
+    let player: Player;
+
+    beforeEach(() => {
+        player = new Player();
+    });
+
+    it("hasFireAbility() is false before any FireOrb is collected", () => {
+        expect(player.hasFireAbility()).toBe(false);
+    });
+
+    it("grantFireAbility() sets hasFireAbility() true for FIRE_ABILITY_DURATION", () => {
+        player.grantFireAbility();
+        expect(player.hasFireAbility()).toBe(true);
+
+        player.update(player.FIRE_ABILITY_DURATION - 1);
+        expect(player.hasFireAbility()).toBe(true);
+
+        player.update(1);
+        expect(player.hasFireAbility()).toBe(false);
+    });
+
+    it("tryFire() returns false when no FireOrb has been collected", () => {
+        expect(player.tryFire()).toBe(false);
+    });
+
+    it("tryFire() returns true when the ability is active and off cooldown, and starts the cooldown", () => {
+        player.grantFireAbility();
+        expect(player.tryFire()).toBe(true);
+        expect(player.fireCooldownTimer).toBe(player.FIRE_COOLDOWN);
+    });
+
+    it("tryFire() returns false immediately after a successful fire (cooldown gating)", () => {
+        player.grantFireAbility();
+        player.tryFire();
+        expect(player.tryFire()).toBe(false);
+    });
+
+    it("tryFire() becomes available again once FIRE_COOLDOWN has fully elapsed", () => {
+        player.grantFireAbility();
+        player.tryFire();
+
+        player.update(player.FIRE_COOLDOWN);
+        expect(player.tryFire()).toBe(true);
+    });
+
+    it("grantFireAbility() called again mid-buff refreshes to exactly FIRE_ABILITY_DURATION, not additive", () => {
+        player.grantFireAbility();
+        player.update(player.FIRE_ABILITY_DURATION / 2);
+        player.grantFireAbility();
+        expect(player.fireAbilityTimer).toBe(player.FIRE_ABILITY_DURATION);
+    });
+
+    it("grantFireAbility() and tryFire() leave velocity untouched", () => {
+        player.addVelocity(0.2, 0.3);
+        player.grantFireAbility();
+        player.tryFire();
+        expect(player.getVelocity().x).toBeCloseTo(0.2);
+        expect(player.getVelocity().y).toBeCloseTo(0.3);
+    });
+});

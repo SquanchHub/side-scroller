@@ -125,6 +125,21 @@
                 {"img":"star3", "duration":150},
                 {"img":"star4", "duration":150}
             ]
+        },
+        "fireorb": {
+            "type": "FireOrb",
+            "default": [
+                {"img":"powerup1", "duration":150},
+                {"img":"powerup2", "duration":150},
+                {"img":"powerup3", "duration":150},
+                {"img":"powerup4", "duration":150}
+            ]
+        },
+        "projectile": {
+            "type": "Projectile",
+            "default": [
+                {"img":"star1", "duration":150}
+            ]
         }
     },
     "images": {
@@ -152,7 +167,7 @@
             "1": "grub",
             "2": "fly",
             "0": "player",
-            "^": "powerup",
+            "^": "fireorb",
             "-": "caveman"
         },
         "levels": [

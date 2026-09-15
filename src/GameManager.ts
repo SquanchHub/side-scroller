@@ -29,6 +29,7 @@ export class GameManager {
     jump: GameAction;
     dash: GameAction;
     stop: GameAction;
+    fire: GameAction;
 
     constructor() {
         this.level = 0;
@@ -43,6 +44,7 @@ export class GameManager {
         this.jump = new GameAction();
         this.dash = new GameAction();
         this.stop = new GameAction();
+        this.fire = new GameAction();
     }
 
     draw() {
@@ -93,6 +95,7 @@ export class GameManager {
                     this.inputManager.setGameAction(this.jump, 32);
                     this.inputManager.setGameAction(this.dash, 70); // F
                     this.inputManager.setGameAction(this.stop, UP_ARROW);
+                    this.inputManager.setGameAction(this.fire, 71); // G
                     this.oldState = STATE.Running;
                     this.gameState = STATE.Menu;
                 }
@@ -127,6 +130,11 @@ export class GameManager {
         }
         if (this.dash.isBeginPress() && this.map.player.getState() == CreatureState.NORMAL) {
             this.map.player.dash();
+        }
+        if (this.fire.isPressed() && this.map.player.getState() == CreatureState.NORMAL) {
+            if (this.map.player.tryFire()) {
+                this.map.spawnProjectile(this.map.player.facing);
+            }
         }
         // commented out so users don't crash game on live version
         // if (this.stop.isBeginPress()) {

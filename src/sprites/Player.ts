@@ -10,6 +10,10 @@ export class Player extends Creature {
     dashTimer: number; // ms remaining in the active dash burst, 0 = not dashing
     dashCooldownTimer: number; // ms remaining before another dash is allowed
     facing: number; // +1 (right) or -1 (left), last nonzero horizontal direction
+    FIRE_ABILITY_DURATION: number;
+    FIRE_COOLDOWN: number;
+    fireAbilityTimer: number; // ms remaining of the FireOrb buff, 0 = can't fire
+    fireCooldownTimer: number; // ms remaining before the next shot is allowed
 
     constructor() {
         super();
@@ -22,6 +26,10 @@ export class Player extends Creature {
         this.dashTimer = 0;
         this.dashCooldownTimer = 0;
         this.facing = 1;
+        this.FIRE_ABILITY_DURATION = 10000;
+        this.FIRE_COOLDOWN = 300;
+        this.fireAbilityTimer = 0;
+        this.fireCooldownTimer = 0;
     }
 
     getMaxSpeed() {
@@ -62,6 +70,22 @@ export class Player extends Creature {
         return this.facing * this.DASH_SPEED;
     }
 
+    grantFireAbility() {
+        this.fireAbilityTimer = this.FIRE_ABILITY_DURATION;
+    }
+
+    hasFireAbility(): boolean {
+        return this.fireAbilityTimer > 0;
+    }
+
+    tryFire(): boolean {
+        if (this.hasFireAbility() && this.fireCooldownTimer <= 0) {
+            this.fireCooldownTimer = this.FIRE_COOLDOWN;
+            return true;
+        }
+        return false;
+    }
+
     setVelocity(x: number, y: number) {
         if (x > 0) {
             this.facing = 1;
@@ -78,6 +102,12 @@ export class Player extends Creature {
         }
         if (this.dashCooldownTimer > 0) {
             this.dashCooldownTimer = Math.max(0, this.dashCooldownTimer - deltaTime);
+        }
+        if (this.fireAbilityTimer > 0) {
+            this.fireAbilityTimer = Math.max(0, this.fireAbilityTimer - deltaTime);
+        }
+        if (this.fireCooldownTimer > 0) {
+            this.fireCooldownTimer = Math.max(0, this.fireCooldownTimer - deltaTime);
         }
     }
 
