@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { GameMap } from "../src/GameMap";
 import { Projectile } from "../src/sprites/Projectile";
+import { Bullet } from "../src/sprites/Bullet";
 import { Player } from "../src/sprites/Player";
 import { Grub, CreatureState } from "../src/sprites/Creature";
 import type { ResourceManager } from "../src/ResourceManager";
@@ -94,7 +95,7 @@ describe("GameMap projectile physics", () => {
         expect(map.projectiles).toContain(p); // still alive
     });
 
-    it("hitting a tile horizontally also sets hitSomething and removes the projectile", () => {
+    it("hitting a tile horizontally also sets hitSomething and removes the projectile (one frame later)", () => {
         const map = makeGameMap();
         map.tiles[5][2] = {} as p5.Image; // a "wall" occupying x:[320,384) y:[128,192)
         const p = withMockImage(new Projectile(), 16, 16);
@@ -105,6 +106,12 @@ describe("GameMap projectile physics", () => {
         map.updateProjectiles();
 
         expect(p.hitSomething).toBe(true);
+        // Still present for one more frame -- see updateProjectiles()'s
+        // pendingRemoval comment: this lets it actually be drawn once at the
+        // wall-snapped position before disappearing.
+        expect(map.projectiles).toContain(p);
+
+        map.updateProjectiles();
         expect(map.projectiles).not.toContain(p);
     });
 
@@ -121,8 +128,32 @@ describe("GameMap projectile physics", () => {
         map.updateProjectiles();
 
         expect(grub.getState()).toBe(CreatureState.DYING);
-        expect(map.projectiles).not.toContain(p);
         expect(map.soundManager.playEvent).toHaveBeenCalledWith("fireHit");
+        expect(map.projectiles).toContain(p); // removed one frame later, see pendingRemoval
+
+        map.updateProjectiles();
+        expect(map.projectiles).not.toContain(p);
+    });
+
+    it("incinerates its target instantly: no body, no separate deathEffect splat, just the fireball's own explosion", () => {
+        const map = makeGameMap();
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        grub.deathEffect = "bugjuice"; // set by ResourceManager for a real grub
+        map.sprites.push(grub);
+
+        const p = withMockImage(new Projectile(), 16, 16);
+        p.setPosition(300, 100);
+        map.projectiles.push(p);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+
+        expect(grub.getState()).toBe(CreatureState.DYING);
+        expect(grub.explodesOnDeath).toBe(true); // hidden and physics-frozen, like player/caveman
+        // Only the fireball's own detonation -- never the grub's bugjuice.
+        expect(spawnSpy).toHaveBeenCalledTimes(1);
+        expect(spawnSpy).toHaveBeenCalledWith("explosion", 300, 100);
     });
 
     it("does not interact with a DYING/DEAD creature (regression of isCollision()'s existing state exclusion)", () => {
@@ -257,11 +288,136 @@ describe("GameMap projectile physics", () => {
 
         map.updateProjectiles();
 
-        expect(map.projectiles).not.toContain(hitter);
+        expect(map.projectiles).toContain(hitter); // removed one frame later, see pendingRemoval
         expect(map.projectiles).toContain(flyer);
         expect(grub.getState()).toBe(CreatureState.DYING);
         expect(map.soundManager.playEvent).toHaveBeenCalledTimes(1); // flyer didn't also trigger a hit sound
         expect(map.soundManager.playEvent).toHaveBeenCalledWith("fireHit");
+
+        map.updateProjectiles();
+        expect(map.projectiles).not.toContain(hitter);
+        expect(map.projectiles).toContain(flyer); // still flying, untouched
+        expect(map.soundManager.playEvent).toHaveBeenCalledTimes(1); // no repeat hit sound on the deferred removal
+    });
+});
+
+describe("GameMap projectile physics with a Bullet (explodesOnRemoval=false)", () => {
+    it("kills an enemy on overlap the same way a fireball does, but spawns no explosion effect", () => {
+        const map = makeGameMap();
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        map.sprites.push(grub);
+
+        const b = withMockImage(new Bullet(), 16, 16);
+        b.setPosition(300, 100);
+        map.projectiles.push(b);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+        map.updateProjectiles(); // finalize the deferred removal (see pendingRemoval)
+
+        expect(grub.getState()).toBe(CreatureState.DYING); // its own default death animation
+        expect(map.projectiles).not.toContain(b);
+        expect(spawnSpy).not.toHaveBeenCalled(); // no fireball-style detonation
+    });
+
+    it("still spawns the enemy's own deathEffect (e.g. bugjuice) on a kill, despite explodesOnRemoval=false", () => {
+        // explodesOnRemoval only gates the projectile's OWN detonation
+        // effect on removal (see updateProjectiles()) -- it must not affect
+        // killCreature() spawning the killed creature's unrelated
+        // deathEffect (bugjuice for grub/fly, an explosion for
+        // player/caveman).
+        const map = makeGameMap();
+        const grub = withMockImage(new Grub(), 16, 16);
+        grub.setPosition(300, 100);
+        grub.deathEffect = "bugjuice";
+        map.sprites.push(grub);
+
+        const b = withMockImage(new Bullet(), 16, 16);
+        b.setPosition(300, 100);
+        map.projectiles.push(b);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+
+        expect(spawnSpy).toHaveBeenCalledWith("bugjuice", 300, 100);
+    });
+
+    it("is still drawn exactly touching the wall for one frame before disappearing (the actual bug this guards against)", () => {
+        const map = makeGameMap();
+        map.tiles[5][2] = {} as p5.Image; // a "wall" occupying x:[320,384) y:[128,192)
+        const b = withMockImage(new Bullet(), 16, 16);
+        b.setPosition(303, 150);
+        b.setVelocity(0.6, 0);
+        map.projectiles.push(b);
+
+        map.updateProjectiles();
+
+        // updateSprite() snaps the right edge onto the wall surface (x=320)
+        // this same frame, and draw() (called after update() each real
+        // frame) still iterates this.projectiles regardless of
+        // pendingRemoval -- so as long as it's still in the array, it's
+        // drawn at this exact, fully-touching position at least once.
+        expect(map.projectiles).toContain(b);
+        expect(b.getPosition().x + b.getCollisionWidth()).toBe(320);
+
+        map.updateProjectiles();
+        expect(map.projectiles).not.toContain(b);
+        // Not moved any further during the deferred frame.
+        expect(b.getPosition().x + b.getCollisionWidth()).toBe(320);
+    });
+
+    it("disappears on a wall hit without spawning an explosion", () => {
+        const map = makeGameMap();
+        map.tiles[5][2] = {} as p5.Image; // a "wall" occupying x:[320,384) y:[128,192)
+        const b = withMockImage(new Bullet(), 16, 16);
+        b.setPosition(303, 150);
+        b.setVelocity(0.6, 0);
+        map.projectiles.push(b);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        map.updateProjectiles();
+        map.updateProjectiles(); // finalize the deferred removal (see pendingRemoval)
+
+        expect(b.hitSomething).toBe(true);
+        expect(map.projectiles).not.toContain(b);
+        expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
+    it("expires silently with no explosion", () => {
+        const map = makeGameMap();
+        const b = withMockImage(new Bullet(), 16, 16);
+        b.setPosition(300, 100);
+        map.projectiles.push(b);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        const ticks = Math.ceil(b.LIFETIME / 16) + 1;
+        for (let i = 0; i < ticks; i++) {
+            map.updateProjectiles();
+        }
+
+        expect(map.projectiles).not.toContain(b);
+        expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
+    it("is unaffected by gravity, unlike a fireball", () => {
+        const map = makeGameMap();
+        const fireball = withMockImage(new Projectile(), 16, 16);
+        fireball.setPosition(300, 100);
+        fireball.setVelocity(0, 0);
+        map.projectiles.push(fireball);
+
+        const bullet = withMockImage(new Bullet(), 16, 16);
+        bullet.setPosition(300, 100);
+        bullet.setVelocity(0, 0);
+        map.projectiles.push(bullet);
+
+        for (let i = 0; i < 5; i++) {
+            map.updateProjectiles();
+        }
+
+        expect(fireball.getPosition().y).toBeGreaterThan(100); // pulled down
+        expect(bullet.getPosition().y).toBe(100); // untouched
     });
 });
 
@@ -271,15 +427,21 @@ describe("GameMap.spawnProjectile()", () => {
         const player = withMockImage(new Player(), 32, 32);
         player.setPosition(100, 200);
         map.player = player;
-        const template = makeProjectileTemplate(16, 16);
+        // spawnProjectile() picks "projectile" (fireball) or "bullet" based
+        // on player.hasFireAbility() -- the default test player has neither
+        // granted, so it resolves to "bullet". Both need a real
+        // Projectile-like clone template, not just the explosion stub.
+        const projectileTemplate = makeProjectileTemplate(16, 16);
+        const bulletTemplate = makeProjectileTemplate(16, 16);
         map.resources = {
-            get: (name: string) =>
-                name === "projectile"
-                    ? template
-                    : {
-                          clone: () => ({ setPosition: vi.fn() }),
-                          getImage: () => ({ width: 64, height: 64 }),
-                      },
+            get: (name: string) => {
+                if (name === "projectile") return projectileTemplate;
+                if (name === "bullet") return bulletTemplate;
+                return {
+                    clone: () => ({ setPosition: vi.fn() }),
+                    getImage: () => ({ width: 64, height: 64 }),
+                };
+            },
         } as unknown as ResourceManager;
         return map;
     }
@@ -292,6 +454,15 @@ describe("GameMap.spawnProjectile()", () => {
         const p = map.projectiles[0];
         expect(p.getPosition().x).toBe(100 + 32); // playerPos.x + playerImg.width
         expect(p.getVelocity().x).toBeCloseTo(p.SPEED);
+    });
+
+    it("spawns level with the gun barrel (Player.GUN_HEIGHT), not the sprite's vertical center", () => {
+        const map = makeGameMapWithPlayer();
+        map.spawnProjectile(1);
+
+        const p = map.projectiles[0];
+        // playerPos.y (200) + GUN_HEIGHT - half the projectile's own height
+        expect(p.getPosition().y).toBe(200 + Player.GUN_HEIGHT - p.getImage().height / 2);
     });
 
     it("spawns a projectile just past the player's left edge when facing left, moving left", () => {
@@ -326,7 +497,20 @@ describe("GameMap.spawnProjectile()", () => {
         expect(map.soundManager.playEvent).toHaveBeenCalledWith("fireLaunch");
     });
 
-    it("a shot fired point-blank into a wall the player is already touching fizzles on the very next tick (expected, not a crash)", () => {
+    it("spawns a fireball with the FireOrb buff active, a Bullet otherwise", () => {
+        const map = makeGameMapWithPlayer();
+        const getSpy = vi.spyOn(map.resources, "get");
+
+        map.spawnProjectile(1); // no fire ability granted
+        expect(getSpy).toHaveBeenCalledWith("bullet");
+
+        getSpy.mockClear();
+        map.player.grantFireAbility();
+        map.spawnProjectile(1);
+        expect(getSpy).toHaveBeenCalledWith("projectile");
+    });
+
+    it("a shot fired point-blank into a wall the player is already touching fizzles shortly after (expected, not a crash)", () => {
         const map = makeGameMapWithPlayer();
         for (let y = 0; y < 20; y++) {
             map.tiles[2][y] = {} as p5.Image; // solid wall filling the whole column
@@ -337,6 +521,7 @@ describe("GameMap.spawnProjectile()", () => {
         expect(map.projectiles).toHaveLength(1);
 
         map.updateProjectiles();
+        map.updateProjectiles(); // finalize the deferred removal (see pendingRemoval)
         expect(map.projectiles).toHaveLength(0);
     });
 });

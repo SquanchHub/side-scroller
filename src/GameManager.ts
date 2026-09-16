@@ -158,7 +158,13 @@ export class GameManager {
             vel.x = this.map.player.getDashVelocityX();
         }
         this.map.player.setVelocity(vel.x, vel.y);
-        if (this.jump.isPressed() && this.map.player.getState() == CreatureState.NORMAL) {
+        // Edge-triggered (not the continuous isPressed() used for movement
+        // above): jump(false) now also triggers a double jump while
+        // airborne (see Player.jump()), so simply holding the button from
+        // the original jump would otherwise consume it the instant the
+        // player left the ground, before they ever got a chance to use it
+        // deliberately.
+        if (this.jump.isBeginPress() && this.map.player.getState() == CreatureState.NORMAL) {
             this.map.player.jump(false);
         }
         if (this.dash.isBeginPress() && this.map.player.getState() == CreatureState.NORMAL) {

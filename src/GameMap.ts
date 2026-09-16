@@ -25,6 +25,68 @@ export function computeParallaxX(
     return Math.trunc((offsetX * (myW - bgWidth)) / (myW - mapWidth));
 }
 
+// --- Energy (stamina) HUD ---
+// Top-left corner of the bar's own art (energyFrame.png), in the same fixed
+// 800x600 logical space draw() already uses for tiles/background.
+export const ENERGY_BAR_X = 20;
+export const ENERGY_BAR_Y = 20;
+// Centers of the 3 compartments built into energyFrame.png, measured
+// directly off that art (relative to its own top-left corner) -- there's no
+// other way to derive them, since the 3 slots are baked into one image
+// rather than being separate pieces.
+const ENERGY_SLOT_CENTERS: { x: number; y: number }[] = [
+    { x: 44, y: 23 },
+    { x: 100, y: 23 },
+    { x: 156, y: 23 },
+];
+// energyFramePower's canvas is bigger than the plain frame's (the flame
+// extends past the metal structure on every side, whereas the plain frame
+// was cropped tight to its content), so the same underlying bar structure
+// sits further from THAT canvas's own top-left corner. Drawing it at the
+// plain frame's exact position would visibly shift the bar down-right;
+// this pulls it back left/up so the metal structure lines up across the
+// swap. Derived from where the bar sits in the source art plus each power
+// frame's own padding, and close enough across all 3 frames (~1px apart)
+// to use one constant offset rather than one per frame.
+export const ENERGY_FRAME_POWER_OFFSET_X = -10;
+export const ENERGY_FRAME_POWER_OFFSET_Y = -13;
+const ENERGY_UNIT_FRAME_DURATION = 150; // energy1-3 loop, matches resources.json... (a plain "images" lookup here, not an Animation, so the duration is only known to this file)
+const ENERGY_USED_FRAME_DURATION = 100; // energyUsed1-3 one-shot
+const ENERGY_FRAME_POWER_FRAME_DURATION = 150; // energyFramePower1-3 loop
+
+// Which image name to draw for one energy slot (index 0-2), or null to draw
+// nothing (empty, still regenerating). A pure function of state/time so it's
+// directly testable without a p5 canvas -- see GameMap.drawEnergyBar().
+export function getEnergySlotImageName(
+    slotIndex: number,
+    energy: number,
+    energyUsedTimer: number,
+    hudTime: number
+): string | null {
+    if (slotIndex < energy) {
+        const frame = (Math.floor(hudTime / ENERGY_UNIT_FRAME_DURATION) % 3) + 1;
+        return `energy${frame}`;
+    }
+    if (slotIndex === energy && energyUsedTimer > 0) {
+        // Counts forward through the burst from elapsed time, not backward
+        // from energyUsedTimer directly, so frame 3 (elapsed >= 200) holds
+        // through the last sliver before the timer hits 0, instead of
+        // skipping straight from frame 3 to empty.
+        const elapsed = Player.ENERGY_USED_ANIM_DURATION - energyUsedTimer;
+        const frame = Math.min(2, Math.floor(elapsed / ENERGY_USED_FRAME_DURATION)) + 1;
+        return `energyUsed${frame}`;
+    }
+    return null;
+}
+
+// Which frame of the looping "powered" bar to draw while
+// Player.hasFireAbility() is true (replacing the plain frame + slots
+// entirely -- see drawEnergyBar()).
+export function getEnergyFramePowerImageName(hudTime: number): string {
+    const frame = (Math.floor(hudTime / ENERGY_FRAME_POWER_FRAME_DURATION) % 3) + 1;
+    return `energyFramePower${frame}`;
+}
+
 export class GameMap {
     tiles: p5.Image[][];
     tile_size: number;
@@ -39,6 +101,12 @@ export class GameMap {
     settings: Settings;
     soundManager: SoundManager;
     music: p5.SoundFile;
+    // Accumulated real time, used only to pick which frame of the energy
+    // bar's looping animations (unit shimmer, powered-bar flame) to show --
+    // see drawEnergyBar(). Deliberately not reset by initialize() (a level
+    // transition/player death restart), unlike sprites/tiles, since it's not
+    // level content.
+    hudTime: number;
 
     constructor(
         level: number,
@@ -50,6 +118,7 @@ export class GameMap {
         this.soundManager = soundManager;
         this.level = level;
         this.resources = resources;
+        this.hudTime = 0;
         this.initialize();
     }
 
@@ -200,6 +269,42 @@ export class GameMap {
                 Math.trunc(Math.trunc(p.y) + offsetY)
             );
         });
+
+        this.drawEnergyBar();
+    }
+
+    // The stamina HUD, top-left corner of the screen (fixed logical
+    // coordinates, not affected by the camera offsetX/offsetY used for the
+    // world above). While the FireOrb buff is active, the whole bar swaps to
+    // the looping energyFramePower art instead of the plain frame + slots.
+    drawEnergyBar() {
+        if (this.player.hasFireAbility()) {
+            const frameImg = this.resources.get(getEnergyFramePowerImageName(this.hudTime));
+            image(
+                frameImg,
+                ENERGY_BAR_X + ENERGY_FRAME_POWER_OFFSET_X,
+                ENERGY_BAR_Y + ENERGY_FRAME_POWER_OFFSET_Y
+            );
+            return;
+        }
+        image(this.resources.get("energyFrame"), ENERGY_BAR_X, ENERGY_BAR_Y);
+        for (let i = 0; i < Player.MAX_ENERGY; i++) {
+            const name = getEnergySlotImageName(
+                i,
+                this.player.energy,
+                this.player.energyUsedTimer,
+                this.hudTime
+            );
+            if (name) {
+                const unitImg = this.resources.get(name);
+                const center = ENERGY_SLOT_CENTERS[i];
+                image(
+                    unitImg,
+                    ENERGY_BAR_X + center.x - unitImg.width / 2,
+                    ENERGY_BAR_Y + center.y - unitImg.height / 2
+                );
+            }
+        }
     }
 
     isCollision(s1: Sprite, s2: Sprite): boolean {
@@ -279,6 +384,20 @@ export class GameMap {
         }
     }
 
+    // A fireball kill: the target is destroyed instantly, leaving only the
+    // fireball's own explosion behind (see updateProjectiles()) -- no
+    // lingering body/tumbling animation and no separate deathEffect splat of
+    // its own, unlike an ordinary (stomp/dash/bullet) kill via
+    // killCreature(). Force-enables the same hide-and-freeze treatment
+    // GameMap already gives player/caveman (see Creature.explodesOnDeath) on
+    // this one creature regardless of species, so a grub/fly disappears
+    // instead of falling and flopping through its own flipped death
+    // animation the way it normally would.
+    incinerateCreature(c: Creature) {
+        c.explodesOnDeath = true;
+        c.setState(CreatureState.DYING);
+    }
+
     spawnEffect(resourceName: string, x: number, y: number) {
         const effect = this.resources.get(resourceName).clone();
         effect.setPosition(x, y);
@@ -307,19 +426,26 @@ export class GameMap {
     }
 
     spawnProjectile(direction: number) {
-        const p = (this.resources.get("projectile") as Projectile).clone();
+        // Fireball while the FireOrb buff is active, a plain Bullet
+        // otherwise (see Player.tryFire() -- firing itself no longer
+        // requires the buff at all).
+        const resourceName = this.player.hasFireAbility() ? "projectile" : "bullet";
+        const p = (this.resources.get(resourceName) as Projectile).clone();
         const playerPos = this.player.getPosition();
         const playerImg = this.player.getImage();
         const projImg = p.getImage();
         const spawnX = direction > 0 ? playerPos.x + playerImg.width : playerPos.x - projImg.width;
-        const spawnY = playerPos.y + playerImg.height / 2 - projImg.height / 2;
+        // Level with the gun barrel, not the sprite's vertical center (see
+        // Player.GUN_HEIGHT) -- the center sits noticeably lower than where
+        // the gun is actually drawn.
+        const spawnY = playerPos.y + Player.GUN_HEIGHT - projImg.height / 2;
         p.setPosition(spawnX, spawnY);
         // Scaled off the player's own speed (rather than a hardcoded
-        // constant on Projectile) so a fireball always reads as clearly
+        // constant on Projectile) so a shot always reads as clearly
         // faster than the player, even if MAX_SPEED is ever retuned.
         p.SPEED = this.player.getMaxSpeed() * 3;
         p.setVelocity(direction * p.SPEED, 0);
-        // A fireball's direction never changes mid-flight, so this is set
+        // A shot's direction never changes mid-flight, so this is set
         // once here rather than reused from Sprite's per-frame
         // setVelocity()-driven switching -- Projectile.setVelocity()
         // deliberately skips that (see its class comment), since it's
@@ -336,6 +462,12 @@ export class GameMap {
         // the same tick.
         const toRemove: Projectile[] = [];
         this.projectiles.forEach((p) => {
+            if (p.pendingRemoval) {
+                // Already rendered once at its final position (see below) --
+                // actually remove it now, without moving it any further.
+                toRemove.push(p);
+                return;
+            }
             this.updateSprite(p);
             // isCollision() already excludes non-NORMAL Creatures, so no need
             // to re-check state here.
@@ -343,43 +475,72 @@ export class GameMap {
                 (s) => s instanceof Creature && this.isCollision(p, s)
             );
             if (target) {
-                (target as Creature).setState(CreatureState.DYING);
+                // A fireball incinerates its target (see
+                // incinerateCreature()) -- instant, no body, no deathEffect
+                // splat of its own, just the fireball's explosion (spawned
+                // below via explodesOnRemoval). A Bullet instead kills
+                // through killCreature(), same as a stomp or dash, so the
+                // target's own deathEffect (bugjuice for grub/fly, an
+                // explosion for player/caveman) still plays.
+                if (p.explodesOnRemoval) {
+                    this.incinerateCreature(target as Creature);
+                } else {
+                    this.killCreature(target as Creature);
+                }
                 this.soundManager.playEvent("fireHit");
             }
             p.update(deltaTime);
             if (target || p.hitSomething || p.isExpired()) {
-                // Same "explosion" Explosion-type resource used for
-                // player/caveman death (see killCreature()) -- plays once in
-                // place, no physics, and self-removes from this.sprites (see
-                // update()'s Explosion branch) once its animation finishes.
-                // On a hit, center it on the enemy rather than the
-                // projectile - isCollision() only requires overlap, not an
-                // exact position match, so the two can differ slightly.
-                let pos: p5.Vector;
-                if (target) {
-                    pos = target.getPosition();
-                } else {
-                    // Wall hit or fizzled out with no target: center it on
-                    // the fireball's own leading tip -- the edge of its
-                    // collision box in whichever direction it was
-                    // traveling -- rather than its top-left corner. On a
-                    // wall hit specifically, updateSprite()'s horizontal
-                    // tile-collision snap (above) has already placed that
-                    // edge exactly on the wall surface, so this lands on
-                    // the actual point of impact, not just somewhere near
-                    // the projectile's own footprint.
-                    const explosionImg = (this.resources.get("explosion") as Explosion).getImage();
-                    const vel = p.getVelocity();
-                    const ppos = p.getPosition();
-                    const tipX = vel.x >= 0 ? ppos.x + p.getCollisionWidth() : ppos.x;
-                    const tipY = ppos.y + p.getCollisionHeight() / 2;
-                    pos = createVector(
-                        tipX - explosionImg.width / 2,
-                        tipY - explosionImg.height / 2
-                    );
+                if (p.explodesOnRemoval) {
+                    // Same "explosion" Explosion-type resource used for
+                    // player/caveman death (see killCreature()) -- plays once
+                    // in place, no physics, and self-removes from
+                    // this.sprites (see update()'s Explosion branch) once its
+                    // animation finishes. A plain Bullet skips all of this
+                    // (see its class comment) and just disappears.
+                    // On a hit, center it on the enemy rather than the
+                    // projectile - isCollision() only requires overlap, not
+                    // an exact position match, so the two can differ
+                    // slightly.
+                    let pos: p5.Vector;
+                    if (target) {
+                        pos = target.getPosition();
+                    } else {
+                        // Wall hit or fizzled out with no target: center it
+                        // on the projectile's own leading tip -- the edge of
+                        // its collision box in whichever direction it was
+                        // traveling -- rather than its top-left corner. On a
+                        // wall hit specifically, updateSprite()'s horizontal
+                        // tile-collision snap (above) has already placed
+                        // that edge exactly on the wall surface, so this
+                        // lands on the actual point of impact, not just
+                        // somewhere near the projectile's own footprint.
+                        const explosionImg = (
+                            this.resources.get("explosion") as Explosion
+                        ).getImage();
+                        const vel = p.getVelocity();
+                        const ppos = p.getPosition();
+                        const tipX = vel.x >= 0 ? ppos.x + p.getCollisionWidth() : ppos.x;
+                        const tipY = ppos.y + p.getCollisionHeight() / 2;
+                        pos = createVector(
+                            tipX - explosionImg.width / 2,
+                            tipY - explosionImg.height / 2
+                        );
+                    }
+                    this.spawnEffect("explosion", pos.x, pos.y);
                 }
-                this.spawnEffect("explosion", pos.x, pos.y);
-                toRemove.push(p);
+                // Deferred one frame (see the pendingRemoval check above)
+                // instead of removing it immediately: updateSprite() above
+                // already snapped this frame's position exactly onto the
+                // wall (or onto the enemy it overlapped), but splicing it
+                // out of this.projectiles right now would mean that exact
+                // position is never actually drawn -- the last frame ever
+                // rendered would be the one before this snap, up to a whole
+                // frame's travel short of the wall. That gap was masked for
+                // a fireball by its own explosion appearing right at the
+                // true contact point, but a Bullet has no such effect to
+                // hide it behind, so it visibly vanished short of the wall.
+                p.pendingRemoval = true;
             }
         });
         toRemove.forEach((p) => {
@@ -505,6 +666,7 @@ export class GameMap {
     }
 
     update() {
+        this.hudTime += deltaTime;
         if (this.player.getState() == CreatureState.DEAD) {
             this.initialize(); //start the level over
             return;

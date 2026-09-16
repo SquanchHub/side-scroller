@@ -114,6 +114,22 @@
                 {"img":"playerDashPower1", "operators":["mirror"], "duration":50},
                 {"img":"playerDashPower2", "operators":["mirror"], "duration":50},
                 {"img":"playerDashPower3", "operators":["mirror"], "duration":50}
+            ],
+            "doubleJumpLeft": [
+                {"img":"playerDoubleJump1", "duration":100},
+                {"img":"playerDoubleJump2", "duration":100}
+            ],
+            "doubleJumpRight": [
+                {"img":"playerDoubleJump1", "operators":["mirror"], "duration":100},
+                {"img":"playerDoubleJump2", "operators":["mirror"], "duration":100}
+            ],
+            "doubleJumpLeftPower": [
+                {"img":"playerDoubleJumpPower1", "duration":100},
+                {"img":"playerDoubleJumpPower2", "duration":100}
+            ],
+            "doubleJumpRightPower": [
+                {"img":"playerDoubleJumpPower1", "operators":["mirror"], "duration":100},
+                {"img":"playerDoubleJumpPower2", "operators":["mirror"], "duration":100}
             ]
         },
         "music": {
@@ -231,6 +247,19 @@
                 {"img":"fireball2", "operators":["mirror"], "duration":100},
                 {"img":"fireball3", "operators":["mirror"], "duration":100}
             ]
+        },
+        "bullet": {
+            "type": "Bullet",
+            "right": [
+                {"img":"bullet1", "duration":100},
+                {"img":"bullet2", "duration":100},
+                {"img":"bullet3", "duration":100}
+            ],
+            "left": [
+                {"img":"bullet1", "operators":["mirror"], "duration":100},
+                {"img":"bullet2", "operators":["mirror"], "duration":100},
+                {"img":"bullet3", "operators":["mirror"], "duration":100}
+            ]
         }
     },
     "images": {
@@ -245,7 +274,17 @@
         "F": "tile_F",
         "G": "tile_G",
         "H": "tile_H",
-        "I": "tile_I"
+        "I": "tile_I",
+        "energyFrame": "energyFrame",
+        "energyFramePower1": "energyFramePower1",
+        "energyFramePower2": "energyFramePower2",
+        "energyFramePower3": "energyFramePower3",
+        "energy1": "energy1",
+        "energy2": "energy2",
+        "energy3": "energy3",
+        "energyUsed1": "energyUsed1",
+        "energyUsed2": "energyUsed2",
+        "energyUsed3": "energyUsed3"
     },
     "sounds": {
     },
