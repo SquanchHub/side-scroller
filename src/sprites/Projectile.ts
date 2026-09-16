@@ -18,6 +18,16 @@ export class Projectile extends Sprite {
     LIFETIME: number;
     lifeRemaining: number;
     hitSomething: boolean;
+    // Whether GameMap.updateProjectiles() spawns an "explosion" effect
+    // wherever this projectile disappears (enemy hit, wall hit, or simply
+    // expiring) -- true for a fireball's own detonation, false for a plain
+    // Bullet (see its class comment), which just vanishes.
+    explodesOnRemoval: boolean;
+    // Set by GameMap.updateProjectiles() once a removal condition (hit
+    // something, hitSomething, or expired) is first seen, and only actually
+    // spliced out of this.sprites on the NEXT call -- see that method's
+    // comment for why a one-frame delay matters here.
+    pendingRemoval: boolean;
 
     constructor() {
         super();
@@ -25,6 +35,8 @@ export class Projectile extends Sprite {
         this.LIFETIME = 700;
         this.lifeRemaining = this.LIFETIME;
         this.hitSomething = false;
+        this.explodesOnRemoval = true;
+        this.pendingRemoval = false;
     }
 
     setVelocity(x: number, y: number) {
@@ -58,6 +70,8 @@ export class Projectile extends Sprite {
         p.LIFETIME = this.LIFETIME;
         p.lifeRemaining = this.LIFETIME; // fresh clone always starts with a full lifetime
         p.hitSomething = false;
+        p.explodesOnRemoval = this.explodesOnRemoval;
+        p.pendingRemoval = false;
         return p;
     }
 }

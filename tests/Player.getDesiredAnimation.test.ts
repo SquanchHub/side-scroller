@@ -51,6 +51,51 @@ describe("Player.getDesiredAnimation() power-mode suffix", () => {
     });
 });
 
+describe("Player.getDesiredAnimation() double jump", () => {
+    // jump() only allows a double jump once airborneStreak proves the
+    // player has genuinely left the ground (see Player.jump()'s comment) --
+    // a fresh, never-moved player reads as grounded, not airborne.
+    function makeGenuinelyAirborne(p: Player) {
+        p.onGround = false;
+        p.airborneStreak = Player.AIRBORNE_ANIM_MIN_STREAK;
+    }
+
+    it("shows the doubleJump pose immediately when triggered, facing-appropriate and Power-suffixed", () => {
+        const player = makePlayer();
+        makeGenuinelyAirborne(player);
+        player.setVelocity(-0.5, 0); // facing left
+        player.jump(false); // double jump
+        expect(player.getDesiredAnimation()).toBe("doubleJumpLeft");
+
+        const powered = makePlayer();
+        makeGenuinelyAirborne(powered);
+        powered.grantFireAbility();
+        powered.setVelocity(0.5, 0); // facing right
+        powered.jump(false);
+        expect(powered.getDesiredAnimation()).toBe("doubleJumpRightPower");
+    });
+
+    it("falls back to the ordinary jump pose once DOUBLE_JUMP_ANIM_DURATION elapses", () => {
+        const player = makePlayer();
+        makeGenuinelyAirborne(player);
+        player.setVelocity(-0.5, -0.5); // facing left, ascending
+        player.jump(false); // double jump
+        expect(player.getDesiredAnimation()).toBe("doubleJumpLeft");
+
+        player.update(Player.DOUBLE_JUMP_ANIM_DURATION); // the animation's one-shot window fully elapses
+        expect(player.getDesiredAnimation()).toBe("jumpUpLeft");
+    });
+
+    it("dashing overrides an in-progress doubleJump animation", () => {
+        const player = makePlayer();
+        makeGenuinelyAirborne(player);
+        player.setVelocity(-0.5, 0);
+        player.jump(false); // double jump, starts the one-shot animation window
+        player.dash();
+        expect(player.getDesiredAnimation()).toBe("dashLeft");
+    });
+});
+
 describe("Player.dash() animation reset with the fire ability active", () => {
     it("resets to the Power dash animation, not the plain one, when the fire ability is active", () => {
         const player = makePlayer();

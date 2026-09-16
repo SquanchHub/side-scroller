@@ -43,10 +43,11 @@ describe("GameManager.processActions() fire input", () => {
         expect(spawnProjectile).toHaveBeenCalledWith(player.facing);
     });
 
-    it("does not fire when no FireOrb has been collected", () => {
+    it("still fires without a FireOrb collected (GameMap.spawnProjectile() picks a Bullet instead of a fireball)", () => {
         gm.fire.press();
         gm.processActions();
-        expect(spawnProjectile).not.toHaveBeenCalled();
+        expect(spawnProjectile).toHaveBeenCalledTimes(1);
+        expect(spawnProjectile).toHaveBeenCalledWith(player.facing);
     });
 
     it("does not fire again while still on cooldown", () => {

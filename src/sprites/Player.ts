@@ -32,10 +32,38 @@ export class Player extends Creature {
     // should track the character's actual footprint, not that cosmetic art
     // size -- see Sprite.getCollisionWidth/getCollisionHeight.
     static readonly COLLISION_SIZE = 64;
+    // How far down from the top of the (left-facing) walk/idle frames a shot
+    // should spawn to read as level with the gun -- used by
+    // GameMap.spawnProjectile() instead of the sprite's vertical center
+    // (which sits noticeably lower than the gun barrel itself, measured at
+    // ~24px off player1-3/playerPower1-3). Nudged a bit below that raw
+    // measurement since the projectile art's own glow sits high in its
+    // frame, so anchoring exactly on the muzzle read as slightly too high.
+    static readonly GUN_HEIGHT = 28;
     FIRE_ABILITY_DURATION: number;
     FIRE_COOLDOWN: number;
     fireAbilityTimer: number; // ms remaining of the FireOrb buff, 0 = can't fire
     fireCooldownTimer: number; // ms remaining before the next shot is allowed
+    DOUBLE_JUMP_SPEED: number;
+    canDoubleJump: boolean; // refilled on landing (see collideVertical()), spent on use
+    doubleJumpAnimTimer: number; // ms remaining to force the one-shot doubleJump pose (see getDesiredAnimation())
+    // The 2-frame doubleJump animation (see resources.json) is 100ms/frame;
+    // getDesiredAnimation() favors it for exactly this long so it plays
+    // through once and then falls back to the ordinary jump pose, the same
+    // trick DASH_DURATION uses to size a one-shot animation window.
+    static readonly DOUBLE_JUMP_ANIM_DURATION = 200;
+    // Stamina for special actions (dash, double jump, an unpowered shot --
+    // see spendEnergy(), called from each). 3 whole units, one regenerating
+    // per second, unlimited while the FireOrb buff is active.
+    static readonly MAX_ENERGY = 3;
+    static readonly ENERGY_REGEN_TIME = 2000;
+    // The energyUsed burst (see resources.json) is 3 frames x 100ms; the
+    // HUD (GameMap) shows it on whichever slot was just spent for exactly
+    // this long, then leaves that slot empty until it regenerates.
+    static readonly ENERGY_USED_ANIM_DURATION = 300;
+    energy: number;
+    energyRegenTimer: number; // ms accrued toward refilling the next unit
+    energyUsedTimer: number; // ms remaining to show the "just spent" burst
 
     constructor() {
         super();
@@ -53,6 +81,16 @@ export class Player extends Creature {
         this.FIRE_COOLDOWN = 300;
         this.fireAbilityTimer = 0;
         this.fireCooldownTimer = 0;
+        // Half the HEIGHT of a normal jump, not half the speed: under
+        // constant gravity, max height scales with velocity squared
+        // (h = v^2/2g), so halving height means scaling velocity by
+        // 1/sqrt(2), not by 1/2.
+        this.DOUBLE_JUMP_SPEED = this.JUMP_SPEED / Math.sqrt(2);
+        this.canDoubleJump = true;
+        this.doubleJumpAnimTimer = 0;
+        this.energy = Player.MAX_ENERGY;
+        this.energyRegenTimer = 0;
+        this.energyUsedTimer = 0;
     }
 
     getCollisionWidth(): number {
@@ -70,6 +108,7 @@ export class Player extends Creature {
     collideVertical() {
         if (this.velocity.y > 0) {
             this.onGround = true;
+            this.canDoubleJump = true; // refill on landing, however it happened (jumped, fell off a ledge, ...)
         }
         this.velocity.y = 0;
     }
@@ -80,14 +119,44 @@ export class Player extends Creature {
     }
 
     jump(forceJump: boolean) {
-        if (this.onGround || forceJump) {
+        // Treat a flickered onGround=false as still grounded: a player
+        // resting motionlessly gets a single false frame every other frame
+        // (see the airborneStreak field comment above), and since jump() is
+        // now edge-triggered on isBeginPress() (see
+        // GameManager.processActions()) rather than the continuous
+        // isPressed(), there's no next frame to retry on if that exact
+        // frame is misread. airborneStreak only climbs past this threshold
+        // during a real, sustained fall -- never during the single-frame
+        // flicker -- so using it instead of raw onGround here means an
+        // ordinary ground jump can no longer land on the flicker frame and
+        // either misfire as a half-height double jump or be dropped
+        // entirely.
+        const genuinelyAirborne =
+            !this.onGround && this.airborneStreak >= Player.AIRBORNE_ANIM_MIN_STREAK;
+        if (forceJump || !genuinelyAirborne) {
             this.onGround = false;
             this.setVelocity(0, -this.JUMP_SPEED);
+        } else if (this.canDoubleJump && this.spendEnergy()) {
+            // canDoubleJump is checked before spendEnergy() (short-circuit)
+            // so an attempt blocked purely by empty stamina doesn't consume
+            // the one-per-flight allowance -- it's still available to try
+            // again once energy regenerates, same flight or not.
+            //
+            // A genuine second press while airborne (see
+            // GameManager.processActions(), which edge-triggers this via
+            // isBeginPress() rather than the continuous isPressed() used
+            // elsewhere -- otherwise simply holding the jump button down
+            // would consume the double jump the instant the first one left
+            // the ground). One per flight: spent here, refilled only on
+            // the next landing (see collideVertical()).
+            this.canDoubleJump = false;
+            this.setVelocity(0, -this.DOUBLE_JUMP_SPEED);
+            this.doubleJumpAnimTimer = Player.DOUBLE_JUMP_ANIM_DURATION;
         }
     }
 
     dash(): boolean {
-        if (this.dashCooldownTimer <= 0) {
+        if (this.dashCooldownTimer <= 0 && this.spendEnergy()) {
             this.dashTimer = this.DASH_DURATION;
             this.dashCooldownTimer = this.DASH_COOLDOWN;
             // The dash animation's own cycle length (see resources.json)
@@ -130,8 +199,29 @@ export class Player extends Creature {
         return this.fireAbilityTimer > 0;
     }
 
+    // Spends one energy unit and returns true if the caller may proceed, or
+    // returns false (spending nothing) if empty. Unlimited -- always
+    // succeeds without spending -- while the FireOrb buff is active. Called
+    // by dash(), jump()'s double-jump branch, and tryFire() -- each costs
+    // exactly 1 unit while unpowered.
+    spendEnergy(): boolean {
+        if (this.hasFireAbility()) {
+            return true;
+        }
+        if (this.energy <= 0) {
+            return false;
+        }
+        this.energy -= 1;
+        this.energyUsedTimer = Player.ENERGY_USED_ANIM_DURATION;
+        return true;
+    }
+
     tryFire(): boolean {
-        if (this.hasFireAbility() && this.fireCooldownTimer <= 0) {
+        // Available regardless of hasFireAbility() -- GameMap.spawnProjectile()
+        // picks a fireball or a plain Bullet based on that. Cooldown checked
+        // before spendEnergy() (short-circuit) so a shot blocked purely by
+        // cooldown doesn't also spend stamina for nothing.
+        if (this.fireCooldownTimer <= 0 && this.spendEnergy()) {
             this.fireCooldownTimer = this.FIRE_COOLDOWN;
             return true;
         }
@@ -169,6 +259,30 @@ export class Player extends Creature {
         if (this.fireCooldownTimer > 0) {
             this.fireCooldownTimer = Math.max(0, this.fireCooldownTimer - deltaTime);
         }
+        if (this.doubleJumpAnimTimer > 0) {
+            this.doubleJumpAnimTimer = Math.max(0, this.doubleJumpAnimTimer - deltaTime);
+        }
+        if (this.energyUsedTimer > 0) {
+            this.energyUsedTimer = Math.max(0, this.energyUsedTimer - deltaTime);
+        }
+        // No regen while full (nothing to fill) or while the buff makes
+        // energy moot -- accruing progress toward a unit that's either
+        // already there or doesn't matter yet would just mean an unearned
+        // instant refill the moment the buff ends.
+        if (!this.hasFireAbility() && this.energy < Player.MAX_ENERGY) {
+            this.energyRegenTimer += deltaTime;
+            // A while loop, not if: a single large deltaTime (a stutter, or
+            // just a big test step) can be worth more than one unit, and
+            // each should still count rather than only ever crediting one
+            // per update() call regardless of how much time actually passed.
+            while (
+                this.energyRegenTimer >= Player.ENERGY_REGEN_TIME &&
+                this.energy < Player.MAX_ENERGY
+            ) {
+                this.energyRegenTimer -= Player.ENERGY_REGEN_TIME;
+                this.energy += 1;
+            }
+        }
     }
 
     getDesiredAnimation(): string {
@@ -193,6 +307,13 @@ export class Player extends Creature {
             // (e.g. a mid-air dash resumes into the correct ascending or
             // descending jump frame, not the dash pose or idle).
             anim = this.facing < 0 ? "dashLeft" : "dashRight";
+        } else if (this.doubleJumpAnimTimer > 0) {
+            // One-shot: held only for DOUBLE_JUMP_ANIM_DURATION (see
+            // jump()), matching the doubleJump animation's own 2x100ms
+            // length, so it plays through exactly once and then this check
+            // simply stops matching -- falling through to the ordinary
+            // jump pose below on the very next frame, same pattern as dash.
+            anim = this.facing < 0 ? "doubleJumpLeft" : "doubleJumpRight";
         } else if (!this.onGround && this.airborneStreak >= Player.AIRBORNE_ANIM_MIN_STREAK) {
             // Rising vs. falling, not a timed cycle: frame 1 holds until
             // the jump's apex (velocity.y crosses from negative to

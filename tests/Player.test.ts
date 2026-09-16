@@ -14,10 +14,79 @@ describe("Player", () => {
         expect(player.onGround).toBe(false);
     });
 
-    it("jump(false) when not on ground → no change to velocity or onGround", () => {
+    // jump() treats a couple of consecutive airborne frames (airborneStreak
+    // >= AIRBORNE_ANIM_MIN_STREAK), not raw onGround, as proof the player
+    // has genuinely left the ground -- see the regression tests further
+    // below for why. Helper to put a player in that state for the double
+    // jump tests here without needing a real fall.
+    function makeGenuinelyAirborne(p: Player) {
+        p.onGround = false;
+        p.airborneStreak = Player.AIRBORNE_ANIM_MIN_STREAK;
+    }
+
+    it("jump(false) while genuinely airborne (double jump available) → triggers a double jump", () => {
+        makeGenuinelyAirborne(player);
+        player.jump(false);
+        expect(player.getVelocity().y).toBe(-player.DOUBLE_JUMP_SPEED);
+        expect(player.canDoubleJump).toBe(false);
+    });
+
+    it("jump(false) while genuinely airborne and the double jump is already spent → no change", () => {
+        makeGenuinelyAirborne(player);
+        player.canDoubleJump = false;
         player.jump(false);
         expect(player.getVelocity().y).toBe(0);
         expect(player.onGround).toBe(false);
+    });
+
+    it("DOUBLE_JUMP_SPEED is JUMP_SPEED/sqrt(2), giving half the height (h = v^2/2g)", () => {
+        expect(player.DOUBLE_JUMP_SPEED).toBeCloseTo(player.JUMP_SPEED / Math.sqrt(2));
+        const heightRatio =
+            (player.DOUBLE_JUMP_SPEED * player.DOUBLE_JUMP_SPEED) /
+            (player.JUMP_SPEED * player.JUMP_SPEED);
+        expect(heightRatio).toBeCloseTo(0.5);
+    });
+
+    it("a normal jump does not spend the double jump - one is still available once genuinely airborne", () => {
+        player.onGround = true;
+        player.jump(false); // normal jump
+        expect(player.canDoubleJump).toBe(true);
+        makeGenuinelyAirborne(player); // a real jump would build this up over a couple of frames
+        player.jump(false); // double jump
+        expect(player.getVelocity().y).toBe(-player.DOUBLE_JUMP_SPEED);
+        expect(player.canDoubleJump).toBe(false);
+    });
+
+    it("a second double jump attempt in the same flight does nothing", () => {
+        makeGenuinelyAirborne(player);
+        player.jump(false); // double jump
+        const vyAfterFirst = player.getVelocity().y;
+        player.jump(false); // attempt a second one
+        expect(player.getVelocity().y).toBe(vyAfterFirst); // unchanged
+    });
+
+    it("landing (collideVertical with vy > 0) refills the double jump", () => {
+        makeGenuinelyAirborne(player);
+        player.jump(false); // spend it
+        expect(player.canDoubleJump).toBe(false);
+        player.setVelocity(0, 0.3); // now falling back down
+        player.collideVertical();
+        expect(player.canDoubleJump).toBe(true);
+    });
+
+    it("regression: a ground jump on a flickered onGround=false frame still gives a full jump, not a double jump", () => {
+        // The exact bug this guards against: a player resting motionlessly
+        // gets a single flickered onGround=false frame every other frame
+        // (see Player.airborneStreak's comment), which used to be harmless
+        // when jump() fired on every held frame -- but jump() is now
+        // edge-triggered (see GameManager.processActions()), so pressing
+        // jump on exactly that frame must still read as "grounded," not as
+        // "airborne enough for a double jump."
+        player.onGround = false; // the flicker frame
+        player.airborneStreak = 1; // below AIRBORNE_ANIM_MIN_STREAK -- not a real fall
+        player.jump(false);
+        expect(player.getVelocity().y).toBe(-player.JUMP_SPEED); // full height, not DOUBLE_JUMP_SPEED
+        expect(player.canDoubleJump).toBe(true); // untouched -- this wasn't a double jump
     });
 
     it("jump(false) when onGround → sets vy=-0.95, onGround=false", () => {
@@ -196,8 +265,9 @@ describe("Player fire ability", () => {
         expect(player.hasFireAbility()).toBe(false);
     });
 
-    it("tryFire() returns false when no FireOrb has been collected", () => {
-        expect(player.tryFire()).toBe(false);
+    it("tryFire() succeeds even without a FireOrb collected (GameMap.spawnProjectile() picks a Bullet instead)", () => {
+        expect(player.tryFire()).toBe(true);
+        expect(player.fireCooldownTimer).toBe(player.FIRE_COOLDOWN);
     });
 
     it("tryFire() returns true when the ability is active and off cooldown, and starts the cooldown", () => {
