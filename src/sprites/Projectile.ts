@@ -5,9 +5,10 @@ import { Sprite } from "./Sprite.js";
  * gravity like any other Sprite passed to GameMap.updateSprite() (it does
  * not override isFlying()). It deliberately overrides setVelocity() to skip
  * the base class's animation-name switching: GameMap.updateSprite() calls
- * setVelocity() every tick to apply gravity, and a placeholder sprite with
- * only a "default" animation has no "left"/"right" keys, so calling the
- * base implementation would crash the next time the animation is read.
+ * setVelocity() every tick just to apply gravity, and re-deriving
+ * left/right from velocity.x every tick would fight with the one-time
+ * facing GameMap.spawnProjectile() sets at launch (a fireball's direction
+ * never changes mid-flight, unlike a walking Creature).
  *
  * Landing on the ground doesn't destroy it - it rolls until it hits a wall
  * or its LIFETIME runs out (see collideVertical()/collideHorizontal()).

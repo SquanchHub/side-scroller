@@ -76,6 +76,44 @@
                 {"img":"playerDash1", "operators":["mirror"], "duration":50},
                 {"img":"playerDash2", "operators":["mirror"], "duration":50},
                 {"img":"playerDash3", "operators":["mirror"], "duration":50}
+            ],
+            "leftPower": [
+                {"img":"playerPower1", "duration":250},
+                {"img":"playerPower2", "duration":150},
+                {"img":"playerPower1", "duration":150},
+                {"img":"playerPower2", "duration":150},
+                {"img":"playerPower3", "duration":200},
+                {"img":"playerPower2", "duration":150}
+            ],
+            "rightPower": [
+                {"img":"playerPower1", "operators":["mirror"], "duration":250},
+                {"img":"playerPower2", "operators":["mirror"], "duration":150},
+                {"img":"playerPower1", "operators":["mirror"], "duration":150},
+                {"img":"playerPower2", "operators":["mirror"], "duration":150},
+                {"img":"playerPower3", "operators":["mirror"], "duration":200},
+                {"img":"playerPower2", "operators":["mirror"], "duration":150}
+            ],
+            "jumpUpLeftPower": [
+                {"img":"playerJumpPower1", "duration":150}
+            ],
+            "jumpUpRightPower": [
+                {"img":"playerJumpPower1", "operators":["mirror"], "duration":150}
+            ],
+            "jumpDownLeftPower": [
+                {"img":"playerJumpPower2", "duration":150}
+            ],
+            "jumpDownRightPower": [
+                {"img":"playerJumpPower2", "operators":["mirror"], "duration":150}
+            ],
+            "dashLeftPower": [
+                {"img":"playerDashPower1", "duration":50},
+                {"img":"playerDashPower2", "duration":50},
+                {"img":"playerDashPower3", "duration":50}
+            ],
+            "dashRightPower": [
+                {"img":"playerDashPower1", "operators":["mirror"], "duration":50},
+                {"img":"playerDashPower2", "operators":["mirror"], "duration":50},
+                {"img":"playerDashPower3", "operators":["mirror"], "duration":50}
             ]
         },
         "music": {
@@ -183,8 +221,15 @@
         },
         "projectile": {
             "type": "Projectile",
-            "default": [
-                {"img":"star1", "duration":150}
+            "right": [
+                {"img":"fireball1", "duration":100},
+                {"img":"fireball2", "duration":100},
+                {"img":"fireball3", "duration":100}
+            ],
+            "left": [
+                {"img":"fireball1", "operators":["mirror"], "duration":100},
+                {"img":"fireball2", "operators":["mirror"], "duration":100},
+                {"img":"fireball3", "operators":["mirror"], "duration":100}
             ]
         }
     },

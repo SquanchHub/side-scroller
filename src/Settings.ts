@@ -22,12 +22,15 @@ export class Settings {
         instructions.style("color", "white");
         this.menu.child(instructions);
         const music = createCheckbox("Play Music", this.soundManager.playMusic);
+        music.style("color", "white");
         music.changed(this.soundManager.toggleMusic.bind(this.soundManager));
         this.menu.child(music);
         const events = createCheckbox("Play Event Sounds", this.soundManager.playEvents);
+        events.style("color", "white");
         events.changed(this.soundManager.toggleEvents.bind(this.soundManager));
         this.menu.child(events);
         this.full = createCheckbox("Full Screen", false);
+        this.full.style("color", "white");
         this.full.changed(this.toggleFullScreen.bind(this));
         this.menu.child(this.full);
         this.menu.hide();

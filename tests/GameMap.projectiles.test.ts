@@ -12,8 +12,11 @@ import type { SoundManager } from "../src/SoundManager";
 // hand-wired too - a generously-sized empty grid by default so gravity can be
 // exercised without incidentally colliding with anything. Also needs
 // resources (a projectile spawns an "explosion" effect via spawnEffect() the
-// moment it's removed, for whatever reason) - a minimal cloneable stand-in
-// is enough since these tests don't inspect the spawned effect itself.
+// moment it's removed, for whatever reason) - a minimal cloneable stand-in is
+// enough since these tests don't inspect the spawned effect itself, but it
+// also needs getImage() (real explosion frames are 64x64) since
+// updateProjectiles() reads the explosion's own size to center it on a wall
+// hit or fizzle-out.
 function makeGameMap() {
     const map = Object.create(GameMap.prototype) as GameMap;
     map.sprites = [];
@@ -22,7 +25,10 @@ function makeGameMap() {
     map.tile_size = 64;
     map.tiles = Array.from({ length: 20 }, () => new Array(20));
     map.resources = {
-        get: () => ({ clone: () => ({ setPosition: vi.fn() }) }),
+        get: () => ({
+            clone: () => ({ setPosition: vi.fn() }),
+            getImage: () => ({ width: 64, height: 64 }),
+        }),
     } as unknown as ResourceManager;
     return map;
 }
@@ -38,11 +44,16 @@ function withMockImage<T extends { getImage: () => p5.Image }>(
 
 // clone() (used by spawnProjectile()) only carries over real animation
 // frames, not ad-hoc instance overrides like withMockImage() above - so the
-// "projectile" resource template needs an actual frame for the clone's
-// getImage() to work.
+// "projectile" resource template needs actual frames for the clone's
+// getImage() to work. spawnProjectile() also sets the clone's animation to
+// "left"/"right" once at launch (see GameMap.ts), so both need frames too,
+// not just "default".
 function makeProjectileTemplate(width: number, height: number): Projectile {
     const p = new Projectile();
-    p.addFrame("default", { width, height } as unknown as p5.Image, 100);
+    for (const anim of ["default", "left", "right"]) {
+        p.addAnimation(anim);
+        p.addFrame(anim, { width, height } as unknown as p5.Image, 100);
+    }
     return p;
 }
 
@@ -164,7 +175,7 @@ describe("GameMap projectile physics", () => {
         expect(spawnSpy).toHaveBeenCalledWith("explosion", 300, 100);
     });
 
-    it("spawns an explosion effect at the projectile's position when it hits a wall", () => {
+    it("centers the explosion on the fireball's leading tip -- the exact point of impact -- on a wall hit", () => {
         const map = makeGameMap();
         map.tiles[5][2] = {} as p5.Image; // a "wall" occupying x:[320,384) y:[128,192)
         const p = withMockImage(new Projectile(), 16, 16);
@@ -175,7 +186,15 @@ describe("GameMap projectile physics", () => {
         const spawnSpy = vi.spyOn(map, "spawnEffect");
         map.updateProjectiles();
 
-        expect(spawnSpy).toHaveBeenCalledWith("explosion", p.getPosition().x, p.getPosition().y);
+        // updateSprite()'s horizontal tile-collision snap places the
+        // projectile's right edge (its direction of travel) exactly on the
+        // wall surface (x=320) -- the explosion (64x64, per makeGameMap()'s
+        // resources mock) should be centered on that point, not on the
+        // projectile's own top-left corner.
+        const finalPos = p.getPosition();
+        const tipX = finalPos.x + p.getCollisionWidth(); // == 320, the wall surface
+        const tipY = finalPos.y + p.getCollisionHeight() / 2;
+        expect(spawnSpy).toHaveBeenCalledWith("explosion", tipX - 32, tipY - 32);
     });
 
     it("spawns an explosion effect when a projectile expires with no collision", () => {
@@ -191,6 +210,25 @@ describe("GameMap projectile physics", () => {
         }
 
         expect(spawnSpy).toHaveBeenCalledWith("explosion", expect.any(Number), expect.any(Number));
+    });
+
+    it("centers the fizzle-out explosion on the fireball's tip in its direction of travel (leftward)", () => {
+        const map = makeGameMap();
+        const p = withMockImage(new Projectile(), 16, 16);
+        p.setPosition(300, 100);
+        p.setVelocity(-0.6, 0); // traveling left, so the tip is the LEFT edge
+        map.projectiles.push(p);
+
+        const spawnSpy = vi.spyOn(map, "spawnEffect");
+        const ticks = Math.ceil(p.LIFETIME / 16) + 1;
+        for (let i = 0; i < ticks; i++) {
+            map.updateProjectiles();
+        }
+
+        const finalPos = p.getPosition();
+        const tipX = finalPos.x; // left edge, not finalPos.x + width
+        const tipY = finalPos.y + p.getCollisionHeight() / 2;
+        expect(spawnSpy).toHaveBeenCalledWith("explosion", tipX - 32, tipY - 32);
     });
 
     it("does NOT spawn an explosion while a projectile is still alive and flying", () => {
@@ -236,7 +274,12 @@ describe("GameMap.spawnProjectile()", () => {
         const template = makeProjectileTemplate(16, 16);
         map.resources = {
             get: (name: string) =>
-                name === "projectile" ? template : { clone: () => ({ setPosition: vi.fn() }) },
+                name === "projectile"
+                    ? template
+                    : {
+                          clone: () => ({ setPosition: vi.fn() }),
+                          getImage: () => ({ width: 64, height: 64 }),
+                      },
         } as unknown as ResourceManager;
         return map;
     }
@@ -258,6 +301,23 @@ describe("GameMap.spawnProjectile()", () => {
         const p = map.projectiles[0];
         expect(p.getPosition().x).toBe(100 - p.getImage().width);
         expect(p.getVelocity().x).toBeCloseTo(-p.SPEED);
+    });
+
+    it("faces the fireball's animation to match the launch direction", () => {
+        const map = makeGameMapWithPlayer();
+
+        map.spawnProjectile(1);
+        expect((map.projectiles[0] as any).currAnimName).toBe("right");
+
+        map.spawnProjectile(-1);
+        expect((map.projectiles[1] as any).currAnimName).toBe("left");
+    });
+
+    it("launches at 3x the player's own movement speed", () => {
+        const map = makeGameMapWithPlayer();
+        map.spawnProjectile(1);
+        const p = map.projectiles[0];
+        expect(p.SPEED).toBeCloseTo(map.player.getMaxSpeed() * 3);
     });
 
     it("plays the launch sound", () => {
