@@ -101,7 +101,10 @@ export class Player extends Creature {
             // Player without going through ResourceManager) never populate
             // a real animations dict, and dash() must stay safe to call
             // even before/without dash art existing.
-            const dashAnim = this.facing < 0 ? "dashLeft" : "dashRight";
+            let dashAnim = this.facing < 0 ? "dashLeft" : "dashRight";
+            if (this.hasFireAbility()) {
+                dashAnim += "Power";
+            }
             if (this.animations[dashAnim]) {
                 this.setAnimation(dashAnim);
                 this.start();
@@ -177,34 +180,42 @@ export class Player extends Creature {
             // (nothing resolves that once physics freezes on death -- see
             // GameMap.updateSprite()) and this method would otherwise keep
             // re-asserting jumpUp/jumpDown over the death animation every
-            // single frame, so it would never actually be seen.
+            // single frame, so it would never actually be seen. Returned
+            // before the power suffix below since "" is a sentinel, not a
+            // real animation name.
             return "";
         }
+        let anim: string;
         if (this.isDashing()) {
             // Overrides jump/idle/walk for the dash's whole duration; once
             // it ends this check simply stops matching and the very next
             // frame falls through to whatever would normally be showing
             // (e.g. a mid-air dash resumes into the correct ascending or
             // descending jump frame, not the dash pose or idle).
-            return this.facing < 0 ? "dashLeft" : "dashRight";
-        }
-        if (!this.onGround && this.airborneStreak >= Player.AIRBORNE_ANIM_MIN_STREAK) {
+            anim = this.facing < 0 ? "dashLeft" : "dashRight";
+        } else if (!this.onGround && this.airborneStreak >= Player.AIRBORNE_ANIM_MIN_STREAK) {
             // Rising vs. falling, not a timed cycle: frame 1 holds until
             // the jump's apex (velocity.y crosses from negative to
             // non-negative), then frame 2 holds until landing. This also
             // means the idle/walk pose never shows while airborne, even if
             // horizontal velocity is 0 (e.g. a straight-up jump).
             if (this.velocity.y < 0) {
-                return this.facing < 0 ? "jumpUpLeft" : "jumpUpRight";
+                anim = this.facing < 0 ? "jumpUpLeft" : "jumpUpRight";
+            } else {
+                anim = this.facing < 0 ? "jumpDownLeft" : "jumpDownRight";
             }
-            return this.facing < 0 ? "jumpDownLeft" : "jumpDownRight";
+        } else {
+            // Creature.getDesiredAnimation() returns "" when standing still
+            // (meaning "leave the current animation alone"), which would
+            // otherwise leave the player frozen on a jump/dash frame forever
+            // after landing/stopping. Fall back to a facing-appropriate idle
+            // pose instead.
+            anim = super.getDesiredAnimation() || (this.facing < 0 ? "left" : "right");
         }
-        // Creature.getDesiredAnimation() returns "" when standing still
-        // (meaning "leave the current animation alone"), which would
-        // otherwise leave the player frozen on a jump/dash frame forever
-        // after landing/stopping. Fall back to a facing-appropriate idle
-        // pose instead.
-        return super.getDesiredAnimation() || (this.facing < 0 ? "left" : "right");
+        // While the FireOrb buff is active, every pose has a "*Power"
+        // counterpart (see resources.json) using the glowing armor art --
+        // same animation names/timing, just a different sprite set.
+        return this.hasFireAbility() ? anim + "Power" : anim;
     }
 
     setPosition(x: number, y: number) {

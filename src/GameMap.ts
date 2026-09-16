@@ -9,6 +9,12 @@ import { Projectile } from "./sprites/Projectile.js";
 import { Settings } from "./Settings.js";
 import { SoundManager } from "./SoundManager.js";
 
+// Upper bound (ms) on the timestep GameMap.updateSprite() uses for a single
+// frame's physics -- see the comment at its usage for why this exists.
+// ~3 frames' worth at a steady 60fps, generous enough to not affect normal
+// play but well below the length of a genuine loading-style stutter.
+export const MAX_PHYSICS_DELTA_TIME = 50;
+
 export function computeParallaxX(
     offsetX: number,
     myW: number,
@@ -308,7 +314,17 @@ export class GameMap {
         const spawnX = direction > 0 ? playerPos.x + playerImg.width : playerPos.x - projImg.width;
         const spawnY = playerPos.y + playerImg.height / 2 - projImg.height / 2;
         p.setPosition(spawnX, spawnY);
+        // Scaled off the player's own speed (rather than a hardcoded
+        // constant on Projectile) so a fireball always reads as clearly
+        // faster than the player, even if MAX_SPEED is ever retuned.
+        p.SPEED = this.player.getMaxSpeed() * 3;
         p.setVelocity(direction * p.SPEED, 0);
+        // A fireball's direction never changes mid-flight, so this is set
+        // once here rather than reused from Sprite's per-frame
+        // setVelocity()-driven switching -- Projectile.setVelocity()
+        // deliberately skips that (see its class comment), since it's
+        // called every tick just to apply gravity.
+        p.setAnimation(direction < 0 ? "left" : "right");
         this.projectiles.push(p);
         this.soundManager.playEvent("fireLaunch");
     }
@@ -339,7 +355,29 @@ export class GameMap {
                 // On a hit, center it on the enemy rather than the
                 // projectile - isCollision() only requires overlap, not an
                 // exact position match, so the two can differ slightly.
-                const pos = target ? target.getPosition() : p.getPosition();
+                let pos: p5.Vector;
+                if (target) {
+                    pos = target.getPosition();
+                } else {
+                    // Wall hit or fizzled out with no target: center it on
+                    // the fireball's own leading tip -- the edge of its
+                    // collision box in whichever direction it was
+                    // traveling -- rather than its top-left corner. On a
+                    // wall hit specifically, updateSprite()'s horizontal
+                    // tile-collision snap (above) has already placed that
+                    // edge exactly on the wall surface, so this lands on
+                    // the actual point of impact, not just somewhere near
+                    // the projectile's own footprint.
+                    const explosionImg = (this.resources.get("explosion") as Explosion).getImage();
+                    const vel = p.getVelocity();
+                    const ppos = p.getPosition();
+                    const tipX = vel.x >= 0 ? ppos.x + p.getCollisionWidth() : ppos.x;
+                    const tipY = ppos.y + p.getCollisionHeight() / 2;
+                    pos = createVector(
+                        tipX - explosionImg.width / 2,
+                        tipY - explosionImg.height / 2
+                    );
+                }
                 this.spawnEffect("explosion", pos.x, pos.y);
                 toRemove.push(p);
             }
@@ -380,17 +418,29 @@ export class GameMap {
         if (s instanceof Creature && s.explodesOnDeath && s.getState() != CreatureState.NORMAL) {
             return;
         }
+        // Clamp the timestep used for this frame's physics (gravity and
+        // position integration) to MAX_PHYSICS_DELTA_TIME. deltaTime is
+        // real elapsed time and can spike well past a normal frame (e.g. a
+        // stutter while GameMap.initialize() builds a freshly loaded level),
+        // and every distance here scales directly with it -- an uncapped
+        // spike lets a single frame cover far more ground than intended
+        // (most noticeably right after a level loads: a dash triggered then
+        // travels dramatically farther than the same dash later once frame
+        // timing has settled). Real-time counters like Player.dashTimer are
+        // deliberately left on the unclamped deltaTime elsewhere -- only the
+        // physical distance covered per frame is bounded here.
+        const dt = Math.min(deltaTime, MAX_PHYSICS_DELTA_TIME);
         //update velocity due to gravity
         const oldVel = s.getVelocity();
         const newPos = s.getPosition().copy();
 
         if (!s.isFlying()) {
-            oldVel.y = oldVel.y + GRAVITY * deltaTime;
+            oldVel.y = oldVel.y + GRAVITY * dt;
             s.setVelocity(oldVel.x, oldVel.y);
         }
 
         //update the x part of position first
-        newPos.x = newPos.x + oldVel.x * deltaTime;
+        newPos.x = newPos.x + oldVel.x * dt;
         //see if there was a collision with a tile at the new location
         let point = this.getTileCollision(s, newPos);
         if (point) {
@@ -406,7 +456,7 @@ export class GameMap {
         s.setPosition(newPos.x, newPos.y);
 
         //now update the y part of the position
-        newPos.y = newPos.y + oldVel.y * deltaTime;
+        newPos.y = newPos.y + oldVel.y * dt;
         point = this.getTileCollision(s, newPos);
         if (point) {
             if (oldVel.y > 0) {
