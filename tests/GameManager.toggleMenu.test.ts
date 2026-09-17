@@ -46,4 +46,22 @@ describe("GameManager.toggleMenu()", () => {
         expect(gm.gameState).toBe(STATE.Running);
         expect(settings.hideMenu).toHaveBeenCalledOnce();
     });
+
+    it("re-shows the menu instead of hiding it if oldState was itself Menu (edge case, not reachable in normal play)", () => {
+        gm.gameState = STATE.Menu;
+        gm.oldState = STATE.Menu;
+        gm.toggleMenu();
+        expect(gm.gameState).toBe(STATE.Menu);
+        expect(settings.showMenu).toHaveBeenCalledOnce();
+        expect(settings.hideMenu).not.toHaveBeenCalled();
+    });
+});
+
+describe("GameManager.toggleFullScreen()", () => {
+    it("delegates to settings.toggleFullScreen()", () => {
+        const gm = Object.create(GameManager.prototype) as GameManager;
+        gm.settings = { toggleFullScreen: vi.fn() } as unknown as Settings;
+        gm.toggleFullScreen();
+        expect(gm.settings.toggleFullScreen).toHaveBeenCalledOnce();
+    });
 });
