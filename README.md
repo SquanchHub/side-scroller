@@ -7,6 +7,11 @@
 Reach your partner directly by emailing the address above — it's their @wisc.edu NetID email.
 ---
 
+## Play Your Game
+
+Play the game live: https://side-scroller-akim227-vzhou2-14a680.pages.doit.wisc.edu
+---
+
 # Typescript Game
 
 ## Setup
