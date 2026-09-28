@@ -1,10 +1,9 @@
-## Your Team
+## The Team
 
 - Andrew Kim (akim227@wisc.edu)
 - Ben Zhang (jzhang2789@wisc.edu)
 - Vincent Zhou (vzhou2@wisc.edu)
 
-Reach your partner directly by emailing the address above — it's their @wisc.edu NetID email.
 ---
 
 ## Play Your Game
@@ -30,7 +29,7 @@ This will create a directory on your computer called **side_scroller** which wil
 
 `npm install`
 
-Your game should be all setup.
+The game should be all setup.
 
 If you are using Visual Studio Code, you can open the directory and use the node script to start a web server and monitor changes.  You can also do this from the command line by typing:
 
