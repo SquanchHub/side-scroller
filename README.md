@@ -6,7 +6,7 @@
 
 ---
 
-## Play Your Game
+## Play The Game
 
 Play the game live: https://side-scroller-akim227-vzhou2-14a680.pages.doit.wisc.edu
 ---
